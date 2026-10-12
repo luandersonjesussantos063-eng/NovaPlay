@@ -1,0 +1,110 @@
+name: Testar links Google Drive V 0.10
+on:
+  push:
+    paths: ['.github/workflows/verify-drive-v010.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --check app.js
+          node --check admin/admin.js
+          node --check catalog.js
+      - name: Install browser
+        run: npm install --no-audit --no-fund --no-save puppeteer-core@24.17.0
+      - name: Test Google Drive link validation and in-app playback
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/nova-server.log 2>&1 &
+          cat > /tmp/verify-drive.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const fs=require("node:fs"), assert=require("node:assert/strict");
+          (async()=>{
+            const text=fs.readFileSync("admin/admin.js","utf8");
+            const marker=text.match(/function parseGoogleDriveLink\(raw\)\{[\s\S]*?\n\}\nfunction sourceMode/);
+            assert(marker,"Drive link parser missing");
+            const parser=new Function("return ("+marker[0].replace(/\nfunction sourceMode$/,"")+")")();
+            const id="1S2m9A_fK5dlTPM7B6vN90t-xUjEWiE1A";
+            const key="0-testResource_123";
+            for(const url of [
+              "https://drive.google.com/file/d/"+id+"/view?usp=sharing",
+              "https://drive.google.com/file/d/"+id+"/preview",
+              "https://drive.google.com/open?id="+id,
+              "https://drive.google.com/uc?id="+id
+            ])assert.equal(parser(url)?.id,id,url);
+            const keyed=parser("https://drive.google.com/file/d/"+id+"/view?resourcekey="+key);
+            assert.equal(keyed?.resourceKey,key);
+            for(const bad of [
+              "https://drive.google.com/drive/folders/"+id,
+              "https://www.google.com/search?q=filme",
+              "https://drive.google.com.evil.test/file/d/"+id+"/view",
+              "https://youtube.com/watch?v=M7lc1UVf-VE",
+              "javascript:alert(1)",
+              "https://drive.google.com/file/d/short/view",
+              "https://drive.google.com/file/d/"+id+"/view?resourcekey=%3Cscript%3E"
+            ])assert.equal(parser(bad),null,bad);
+            console.log("GOOGLE_DRIVE_LINK_PARSER_OK");
+            const browser=await puppeteer.launch({executablePath:"/usr/bin/google-chrome",headless:true,args:["--no-sandbox","--autoplay-policy=no-user-gesture-required"]});
+            const page=await browser.newPage();
+            const errors=[];
+            page.on("pageerror",e=>errors.push(String(e)));
+            await page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            const mockRecord=[
+              {id:"d43e1c4f-e25a-44c8-8ef0-15f760aabf01",title:"Filme do Google Drive",description:"Vídeo próprio",kind:"movie",series_title:null,episode_number:null,genre:"Autoral",production_year:2026,video_path:null,youtube_id:null,google_drive_id:id,google_drive_resource_key:key,poster_path:null,duration_seconds:null,created_at:"2026-10-12T19:00:00Z"},
+              {id:"d43e1c4f-e25a-44c8-8ef0-15f760aabf02",title:"Piloto",description:"Primeiro episódio",kind:"episode",series_title:"Série Google",episode_number:1,genre:"Autoral",production_year:2026,video_path:null,youtube_id:null,google_drive_id:id,google_drive_resource_key:null,poster_path:null,duration_seconds:null,created_at:"2026-10-12T20:00:00Z"}
+            ];
+            const mock="window.supabase={createClient:()=>({from:()=>{const chain={};for(const method of ['select','eq','order'])chain[method]=()=>chain;chain.limit=()=>Promise.resolve({data:"+JSON.stringify(mockRecord)+",error:null});return chain;}})};";
+            await page.setRequestInterception(true);
+            page.on("request",req=>{
+              const url=req.url();
+              if(url.includes("supabase-js@2.58.0/dist/umd/supabase.min.js"))
+                return req.respond({status:200,contentType:"application/javascript",body:mock});
+              if(url.startsWith("https://drive.google.com/file/d/"))
+                return req.respond({status:200,contentType:"text/html",body:"<!doctype html><title>Mock Drive Video</title>"});
+              req.continue();
+            });
+            await page.goto("http://127.0.0.1:8765/",{waitUntil:"domcontentloaded",timeout:25000});
+            await page.waitForSelector(".poster-card[data-id='upload-d43e1c4f-e25a-44c8-8ef0-15f760aabf01'] .card-direct-play",{timeout:15000});
+            await page.click(".poster-card[data-id='upload-d43e1c4f-e25a-44c8-8ef0-15f760aabf01'] .card-direct-play");
+            const state=await page.evaluate(()=>({
+              shown:!document.querySelector("#player-layer").hidden,
+              cinema:document.querySelector("#player-layer").classList.contains("cinema"),
+              drive:document.querySelector("#player-layer").classList.contains("drive-active"),
+              title:document.querySelector("#player-heading").textContent,
+              statusHidden:document.querySelector("#player-status").hidden,
+              customControlsHidden:document.querySelector("#cinema-controls").hidden,
+              frameHidden:document.querySelector("#fallback-frame").hidden,
+              frameSrc:document.querySelector("#fallback-frame").src
+            }));
+            console.log("GOOGLE_DRIVE_PLAYER "+JSON.stringify(state));
+            assert(state.shown&&state.cinema&&state.drive&&state.statusHidden&&state.customControlsHidden&&!state.frameHidden);
+            assert(state.frameSrc==="https://drive.google.com/file/d/"+id+"/preview?resourcekey="+key);
+            assert.equal(state.title,"Filme do Google Drive");
+            await page.click("#player-close");
+            await page.click(".mobile-chips button[data-nav='series']");
+            await page.waitForSelector("#category-grid .poster-card");
+            const series=await page.$$eval("#category-grid .poster-card h3", els=>els.map(x=>x.textContent));
+            assert(series.includes("Série Google"),"Google Drive episode missing from series");
+            const auth=await browser.newPage();
+            await auth.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            await auth.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:15000});
+            const input=await auth.evaluate(()=>{
+              const el=document.querySelector("#source-type");el.value="google-drive";el.dispatchEvent(new Event("change",{bubbles:true}));
+              return {driveVisible:!document.querySelector("#drive-fields").hidden,required:document.querySelector("#drive-url").required,
+               uploadHidden:document.querySelector("#upload-files").hidden,posterVisible:!document.querySelector("#youtube-cover-section").hidden,
+               youtubeHidden:document.querySelector("#youtube-fields").hidden,sourceOptions:el.options.length};
+            });
+            console.log("GOOGLE_DRIVE_ADMIN_UI "+JSON.stringify(input));
+            assert(input.driveVisible&&input.required&&input.uploadHidden&&input.posterVisible&&input.youtubeHidden&&input.sourceOptions===3);
+            assert.equal(errors.length,0,JSON.stringify(errors));
+            console.log("GOOGLE_DRIVE_TEST_OK");
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/verify-drive.cjs

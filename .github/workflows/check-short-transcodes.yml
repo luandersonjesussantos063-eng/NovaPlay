@@ -1,0 +1,26 @@
+name: Conferir vídeos otimizados
+on:
+  push:
+    paths: ['.github/workflows/check-short-transcodes.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Testar transcodes compactos
+        shell: bash
+        env:
+          LINKS: '[{"id":"coffee","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/3/3f/Coffee_Run_-_Blender_Open_Movie-full_movie.webm/Coffee_Run_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"},{"id":"wing","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/3/38/WING_IT%21_-_Blender_Open_Movie-full_movie.webm/WING_IT%21_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"},{"id":"gran","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/7/7c/Caminandes_-_Gran_Dillama_-_Blender_Foundation%27s_new_Open_Movie.webm/Caminandes_-_Gran_Dillama_-_Blender_Foundation%27s_new_Open_Movie.webm.480p.vp9.webm"},{"id":"spring","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a5/Spring_-_Blender_Open_Movie.webm/Spring_-_Blender_Open_Movie.webm.480p.vp9.webm"},{"id":"glass","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/0/02/Glass_Half_-_Blender_Open_Movie-full_movie.webm/Glass_Half_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"},{"id":"charge","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/7/7a/Charge_-_Blender_Open_Movie-full_movie.webm/Charge_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"},{"id":"sprite","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/7/76/Sprite_Fright_-_Blender_Open_Movie-full_movie.webm/Sprite_Fright_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"},{"id":"llama","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d0/Caminandes-_Llama_Drama_-_Short_Movie.ogv/Caminandes-_Llama_Drama_-_Short_Movie.ogv.480p.vp9.webm"},{"id":"hero","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a9/HERO_-_Blender_Open_Movie-full_movie.webm/HERO_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"},{"id":"daily","url":"https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b2/The_Daily_Dweebs_-_Blender_Open_Movie-full_movie.webm/The_Daily_Dweebs_-_Blender_Open_Movie-full_movie.webm.480p.vp9.webm"}]'
+        run: |
+          python3 - <<'PY'
+          import json,os,concurrent.futures,subprocess
+          arr=json.loads(os.environ['LINKS'])
+          def probe(v):
+            r=subprocess.run(['curl','-sSL','-I','--max-time','10','-o','/dev/null','-w','%{http_code}|%{content_type}|%{size_download}',v['url']],capture_output=True,text=True,timeout=14)
+            return v['id']+'|'+r.stdout.strip()+'|'+r.stderr.strip()[:120]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=7) as ex:
+            for v in ex.map(probe,arr): print('TRANS_RESULT '+v,flush=True)
+          PY

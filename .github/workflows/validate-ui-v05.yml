@@ -53,7 +53,7 @@ jobs:
             assert(await page.$eval("#detail-layer",x=>!x.hidden),"Detalhes não abriu");
             assert.equal(await page.$eval("#detail-title",x=>x.textContent),"TV Câmara");
             await page.click("#close-details");
-            await page.click('[data-nav="series"].mobile-chips button');
+            await page.click('.mobile-chips button[data-nav="series"]');
             await page.waitForSelector("#category-grid .poster-card");
             assert.equal(await page.$$eval("#category-grid .poster-card",x=>x.length),2,"Séries não agrupadas");
             await page.click("#category-grid .poster-card .cover-btn");

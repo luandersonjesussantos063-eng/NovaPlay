@@ -34,3 +34,29 @@ jobs:
             echo
             echo "::endgroup::"
           done
+
+      - name: Conferir playlists e segmentos da TV Câmara
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, re
+          base="https://stream3.camara.gov.br/tv1/manifest.m3u8"
+          def fetch(url,limit=3000):
+              try:
+                  req=urllib.request.Request(url,headers={"Origin":"https://novabytesolucoes.com.br","User-Agent":"Mozilla/5.0"})
+                  with urllib.request.urlopen(req,timeout=12) as r:
+                      body=r.read(limit)
+                      print("URL:",url,"STATUS:",r.status,"CORS:",r.headers.get("Access-Control-Allow-Origin"),"MIME:",r.headers.get("Content-Type"),"BYTES:",len(body))
+                      return body.decode("utf-8","replace")
+              except Exception as ex:
+                  print("FAILED:",url,repr(ex));return ""
+          master=fetch(base)
+          print("MASTER:",master[:1800])
+          variant=next((a.strip() for a in master.splitlines() if a and not a.startswith("#")),None)
+          if variant:
+              varurl=urllib.parse.urljoin(base,variant)
+              playlist=fetch(varurl)
+              print("VARIANT:",playlist[:800])
+              segment=next((a.strip() for a in playlist.splitlines() if a and not a.startswith("#")),None)
+              if segment:fetch(urllib.parse.urljoin(varurl,segment),128)
+          PY

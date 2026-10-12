@@ -113,7 +113,7 @@ var v=get("video");
 if(x.mode==="embed"){v.hidden=true;get("live-frame").hidden=false;get("live-frame").src=x.embed;return}
 v.onerror=function(){get("video-error").textContent="O arquivo não carregou no seu navegador. Toque em ‘Abrir na fonte oficial’ para assistir na página de origem."};
 if(!x.src){get("video-error").textContent="Fonte do vídeo indisponível.";return}
-if(/\\.m3u8(?:\\?|$)/i.test(x.src)){
+if(/\.m3u8(?:\?|$)/i.test(x.src)){
  if(v.canPlayType("application/vnd.apple.mpegurl")){v.src=x.src;v.play().catch(function(){})}
  else if(window.Hls&&window.Hls.isSupported()){hls=new window.Hls({enableWorker:true});hls.on(window.Hls.Events.ERROR,function(ev,data){if(data.fatal)get("video-error").textContent="Transmissão temporariamente indisponível."});hls.loadSource(x.src);hls.attachMedia(v);hls.on(window.Hls.Events.MANIFEST_PARSED,function(){v.play().catch(function(){})})}
  else get("video-error").textContent="Navegador sem suporte a HLS.";

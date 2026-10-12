@@ -187,7 +187,7 @@ function renderRows(){
  ["Adicionados ao catálogo",[...db.films.filter(x=>!x.catalogOnly).slice().reverse(),...db.series,...db.films.filter(x=>x.catalogOnly)],"filmes",false],
  ["Minha lista",all.filter(x=>favorite.has(x.id)),"favoritos",false]
  ];
- blocks.forEach(b=>{const row=shelf(...b);if(row)holder.append(row)});
+ blocks.forEach(b=>{const row=shelf(b[0],b[1].slice(0,36),b[2],b[3]);if(row)holder.append(row)});
 }
 const defaultFeatured=["lostworld","nosferatu","lua","caligari"];
 let featured=defaultFeatured.map(byId).filter(Boolean);

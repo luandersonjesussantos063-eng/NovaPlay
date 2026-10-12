@@ -1,0 +1,54 @@
+name: Conferir preenchimento das capas
+on:
+  push:
+    paths:
+      - .github/workflows/verify-poster-fit-v0241.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar navegador
+        run: npm install --no-audit --no-fund --no-save puppeteer-core@24.17.0
+      - name: Testar capas horizontais e verticais em celular e computador
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          cat > /tmp/verify-cover-fit.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          (async()=>{
+           const browser=await puppeteer.launch({headless:true,executablePath:"/usr/bin/google-chrome",args:["--no-sandbox"]});
+           try{
+            for(const width of [393,1440]){
+             const page=await browser.newPage();await page.setViewport({width,height:900,isMobile:width<600});
+             const landscape='<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="orange"/></svg>';
+             const portrait='<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="purple"/></svg>';
+             const url=x=>"data:image/svg+xml;base64,"+Buffer.from(x).toString("base64");
+             await page.goto("http://127.0.0.1:8765/styles.css",{waitUntil:"domcontentloaded"});
+             await page.setContent('<!doctype html><link rel="stylesheet" href="http://127.0.0.1:8765/styles.css">'+
+              '<main style="display:flex;gap:10px"><article class="poster-card" style="flex:0 0 170px"><div class="cover"><img id="wide" src="'+url(landscape)+'"></div></article>'+
+              '<article class="poster-card" style="flex:0 0 170px"><div class="cover"><img id="tall" src="'+url(portrait)+'"></div></article></main>');
+             await page.waitForFunction(()=>getComputedStyle(document.querySelector("#wide")).position==="absolute",{timeout:12000});
+             for(const id of ["wide","tall"]){
+              const x=await page.$eval("#"+id,img=>{
+                const ir=img.getBoundingClientRect(),cr=img.closest(".cover").getBoundingClientRect();
+                return{image:{w:ir.width,h:ir.height,x:ir.x,y:ir.y},cover:{w:cr.width,h:cr.height,x:cr.x,y:cr.y},objectFit:getComputedStyle(img).objectFit}
+              });
+              console.log("POSTER_FIT",width,id,JSON.stringify(x));
+              assert.equal(x.objectFit,"cover");
+              assert(Math.abs(x.image.w-x.cover.w)<=3);
+              assert(Math.abs(x.image.h-x.cover.h)<=3);
+              assert(Math.abs(x.cover.h/x.cover.w-1.5)<.04);
+             }
+             await page.close();
+            }
+            console.log("ALL_POSTER_DIMENSIONS_PASS");
+           }finally{await browser.close()}
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/verify-cover-fit.cjs

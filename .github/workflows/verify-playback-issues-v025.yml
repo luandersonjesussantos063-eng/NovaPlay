@@ -1,0 +1,74 @@
+name: Verificar avisos de reprodução v025
+on:
+  push:
+    paths:
+      - .github/workflows/verify-playback-issues-v025.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir scripts
+        run: |
+          node --check app.js
+          node --check admin/admin.js
+      - name: Preparar navegador Android
+        run: npm install --no-audit --no-fund --no-save puppeteer-core@24.17.0
+      - name: Testar página de erro do Drive, reportar e revisar como administrador
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          cat > /tmp/novaplay-reports.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          const mock="const movie={\"id\":\"11111111-2222-4333-8444-555555555555\",\"title\":\"Filme com link Drive para conferir\",\"description\":\"Teste interno do player\",\"kind\":\"movie\",\"series_title\":null,\"episode_number\":null,\"genre\":\"Drama\",\"production_year\":2022,\"video_path\":null,\"youtube_id\":null,\"google_drive_id\":\"1S2m9A_fK5dlTPM7B6vN90t\",\"google_drive_resource_key\":null,\"poster_path\":null,\"is_published\":true,\"rights_reviewed\":true,\"catalog_only\":false,\"quality_score\":null,\"quality_score_source\":null,\"quality_score_note\":null,\"quality_scored_at\":null,\"review_queue_id\":null,\"rights_reviewed_at\":null,\"file_size_bytes\":null,\"mime_type\":null,\"duration_seconds\":1200,\"created_at\":\"2026-10-12T16:10:00Z\"};window.__reportSends=0;window.supabase={createClient:()=>{const chain=(table)=>{const q={};q.select=()=>q;q.eq=()=>q;q.order=()=>q;q.gte=()=>q;q.in=()=>q;q.range=async()=>({data:table==='novaplay_library'?[movie]:[],error:null});q.limit=async()=>({data:table==='novaplay_playback_issues'?[{item_id:movie.id,report_count:3,last_reported_at:'2026-10-12T21:00:00Z',first_reported_at:'2026-10-12T20:00:00Z',status:'open'}]:[],error:null});q.maybeSingle=async()=>({data:table==='novaplay_featured'?{film_ids:['upload-'+movie.id]}:table==='novaplay_admins'?{user_id:'owner-id'}:null,error:null});q.update=change=>({eq:async()=>({data:change,error:null})});return q;};return{auth:{getUser:async()=>({data:{user:{id:'owner-id',email:'owner@example.com'}},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},rpc:async (fn,args)=>{if(fn==='novaplay_report_playback_problem'){window.__reportSends++;return {data:true,error:null}}return{data:true,error:null}},storage:{from:()=>({getPublicUrl:()=>({data:{publicUrl:''}})})},from:chain};}};";
+          (async()=>{
+           const browser=await puppeteer.launch({headless:true,executablePath:"/usr/bin/google-chrome",args:["--no-sandbox"]});
+           try{
+            const errors=[];
+            const intercept=body=>r=>{
+             if(r.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js"))return r.respond({status:200,contentType:"text/javascript",body});
+             if(r.url().startsWith("https://cdn.jsdelivr.net/"))return r.respond({status:200,contentType:"text/javascript",body:""});
+             if(r.url().includes("drive.google.com/file/"))return r.respond({status:200,contentType:"text/html",body:"<!doctype html><h1>Lamentamos, o ficheiro que pediu não existe.</h1>"});
+             return r.continue();
+            };
+            const page=await browser.newPage();
+            page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            page.on("pageerror",e=>errors.push(e.message));
+            await page.setRequestInterception(true);page.on("request",intercept(mock));
+            await page.goto("http://127.0.0.1:8765/",{waitUntil:"domcontentloaded",timeout:19000});
+            await page.waitForFunction(()=>document.querySelector("#hero-title").textContent==="Filme com link Drive para conferir",{timeout:11000});
+            await page.$eval("#hero-play",el=>el.click());
+            await page.waitForFunction(()=>!document.querySelector("#player-layer").hidden,{timeout:8000});
+            const state=await page.evaluate(()=>({reportButton:!document.querySelector("#player-issue-open").hidden,frameSrc:document.querySelector("#fallback-frame").src}));
+            assert(state.reportButton&&state.frameSrc.includes("drive.google.com"));
+            await page.$eval("#player-issue-open",el=>el.click());
+            await page.waitForFunction(()=>!document.querySelector("#player-issue-panel").hidden,{timeout:4000});
+            await page.$eval("#player-issue-report",el=>el.click());
+            await page.waitForFunction(()=>document.querySelector("#player-issue-feedback").textContent.includes("Aviso enviado"),{timeout:5000});
+            assert.equal(await page.evaluate(()=>window.__reportSends),1);
+            console.log("BROKEN_DRIVE_REPORT_SUCCESS");
+            await page.$eval("#player-issue-dismiss",el=>el.click());
+            assert.equal(await page.$eval("#player-issue-panel",el=>el.hidden),true);
+            const admin=await browser.newPage();
+            admin.on("pageerror",e=>errors.push("ADMIN: "+e.message));
+            await admin.setRequestInterception(true);admin.on("request",intercept(mock));
+            await admin.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:19000});
+            await admin.waitForFunction(()=>document.querySelectorAll(".issue-item").length===1,{timeout:13000});
+            const adminState=await admin.evaluate(()=>({title:document.querySelector(".issue-info strong").textContent,link:document.querySelector(".issue-controls a").href}));
+            assert(adminState.title.includes("Filme com link Drive"));
+            assert(adminState.link.includes("/file/d/"));
+            await admin.$eval(".issue-controls button:first-of-type",el=>el.click());
+            assert.equal(await admin.$eval("#drive-url",el=>el.value),"https://drive.google.com/file/d/1S2m9A_fK5dlTPM7B6vN90t/view");
+            console.log("ADMIN_BROKEN_LINK_QUEUE_OK");
+            assert.deepEqual(errors,[],JSON.stringify(errors));
+            console.log("NOVAPLAY_REPORTING_TEST_PASS");
+           }finally{await browser.close()}
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          
+          JS
+          node /tmp/novaplay-reports.cjs

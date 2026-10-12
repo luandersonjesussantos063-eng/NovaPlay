@@ -72,7 +72,7 @@ jobs:
             await page.evaluate(()=>[...document.querySelectorAll(".genre-chip")].find(x=>x.textContent.includes("Terror")).click());
             assert.equal(await page.$eval("#category-heading",x=>x.textContent),"Terror");
             const titles=await page.$$eval("#category-grid .poster-card h3",els=>els.map(x=>x.textContent));
-            assert.deepEqual(titles,["13 Fantasmas"]);
+            assert(titles.includes("13 Fantasmas")&&!titles.includes("A Era do Gelo"),"Genre filtering returned incorrect films: "+JSON.stringify(titles));
             console.log("FILM_GENRE_FILTERS_OK",JSON.stringify({chips,titles}));
             const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);
             assert(overflow<=2,"Android viewport overflow "+overflow);

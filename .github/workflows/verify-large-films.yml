@@ -1,0 +1,94 @@
+name: Validar filmes grandes NovaPlay
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-large-films.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir JavaScript
+        run: |
+          node --check app.js
+          node --check admin/admin.js
+          node --check catalog.js
+      - name: Preparar Chromium
+        run: npm install --no-save --no-fund --no-audit puppeteer-core@24.17.0
+      - name: Simular celular e player YouTube integrado
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          cat > /tmp/verify-large.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const fs=require("node:fs");
+          const assert=require("node:assert/strict");
+          (async()=>{
+            const code=fs.readFileSync("admin/admin.js","utf8");
+            const match=code.match(/function extractYoutubeId\(raw\)\{[\s\S]*?\n\}\nfunction sourceMode/);
+            assert(match,"URL validation function missing");
+            const extract=new Function("URL","return ("+match[0].replace(/\nfunction sourceMode$/,"")+")")(URL);
+            assert.equal(extract("https://www.youtube.com/watch?v=M7lc1UVf-VE"),"M7lc1UVf-VE");
+            assert.equal(extract("https://youtu.be/M7lc1UVf-VE?si=abc"),"M7lc1UVf-VE");
+            assert.equal(extract("https://www.youtube.com/embed/M7lc1UVf-VE"),"M7lc1UVf-VE");
+            assert.equal(extract("https://youtube.com/shorts/M7lc1UVf-VE"),"M7lc1UVf-VE");
+            assert.equal(extract("https://youtube.com.evil.example/watch?v=M7lc1UVf-VE"),null);
+            assert.equal(extract("https://www.youtube.com/watch?v=bad"),null);
+            console.log("YOUTUBE_LINK_VALIDATION_OK");
+            const browser=await puppeteer.launch({executablePath:"/usr/bin/google-chrome",headless:true,args:["--no-sandbox","--autoplay-policy=no-user-gesture-required"]});
+            const admin=await browser.newPage();
+            const errors=[];
+            admin.on("pageerror",e=>errors.push(String(e)));
+            await admin.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            await admin.goto("http://127.0.0.1:8765/admin/",{waitUntil:"networkidle2",timeout:30000});
+            await admin.waitForFunction(()=>document.getElementById("loading").hidden,{timeout:12000});
+            const ui=await admin.evaluate(()=>{
+              const picker=document.querySelector("#source-type");
+              picker.value="youtube";picker.dispatchEvent(new Event("change",{bubbles:true}));
+              return {hasPicker:!!picker,showLink:!document.querySelector("#youtube-fields").hidden,
+                uploadHidden:document.querySelector("#upload-files").hidden,
+                coverVisible:!document.querySelector("#youtube-cover-section").hidden,
+                requested:document.querySelector("#youtube-url").required,
+                authHidden:document.querySelector("#dashboard").hidden}
+            });
+            assert(ui.hasPicker&&ui.showLink&&ui.uploadHidden&&ui.coverVisible&&ui.requested&&ui.authHidden,JSON.stringify(ui));
+            console.log("MOBILE_ADMIN_YOUTUBE_MODE_OK "+JSON.stringify(ui));
+            const page=await browser.newPage();
+            await page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            page.on("pageerror",e=>errors.push(String(e)));
+            await page.setRequestInterception(true);
+            page.on("request",req=>{
+              const url=req.url();
+              if(url.includes("vajlhodqxskozuxxlujv.supabase.co/rest/v1/novaplay_library")){
+                const headers={"access-control-allow-origin":"*","access-control-allow-methods":"GET,OPTIONS","access-control-allow-headers":"authorization,apikey,content-type,x-client-info","content-type":"application/json"};
+                if(req.method()==="OPTIONS")return req.respond({status:204,headers,body:""});
+                const data=[{id:"f9c8a7d6-68e1-4b91-9321-56781234abcd",title:"Filme Grande de Teste",description:"Teste interno, não publicado.",kind:"movie",series_title:null,episode_number:null,genre:"Autoral",production_year:2026,video_path:null,youtube_id:"M7lc1UVf-VE",poster_path:null,duration_seconds:600,created_at:"2026-10-12T14:00:00.000Z"}];
+                return req.respond({status:200,headers,body:JSON.stringify(data)});
+              }
+              req.continue();
+            });
+            await page.goto("http://127.0.0.1:8765/",{waitUntil:"domcontentloaded",timeout:30000});
+            await page.waitForFunction(()=>Array.from(document.querySelectorAll(".poster-card h3")).some(x=>x.textContent.includes("Filme Grande de Teste")),{timeout:20000});
+            const card=await page.$(".poster-card[data-id='upload-f9c8a7d6-68e1-4b91-9321-56781234abcd']");
+            assert(card,"Uploaded movie card missing");
+            await card.$eval(".card-direct-play",el=>el.click());
+            const state=await page.evaluate(()=>({
+               cinema:document.querySelector("#player-layer").classList.contains("cinema"),
+               visible:!document.querySelector("#player-layer").hidden,
+               url:document.querySelector("#fallback-frame").src,
+               frame:!document.querySelector("#fallback-frame").hidden,
+               videoHidden:document.querySelector("#video").hidden
+            }));
+            console.log("YOUTUBE_PLAYER "+JSON.stringify(state));
+            assert(state.cinema&&state.visible&&state.frame&&state.videoHidden,"YouTube video not inside cinema player");
+            assert(state.url.includes("www.youtube-nocookie.com/embed/M7lc1UVf-VE"),"Incorrect embed URL");
+            console.log("BIG_FILMS_BROWSER_TEST_OK");
+            assert.equal(errors.length,0,"JS errors "+JSON.stringify(errors));
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/verify-large.cjs

@@ -61,7 +61,7 @@ jobs:
             await page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
             page.on("pageerror",e=>errors.push(String(e)));
             const mockData=[{id:"f9c8a7d6-68e1-4b91-9321-56781234abcd",title:"Filme Grande de Teste",description:"Teste interno",kind:"movie",series_title:null,episode_number:null,genre:"Autoral",production_year:2026,video_path:null,youtube_id:"M7lc1UVf-VE",poster_path:null,duration_seconds:600,created_at:"2026-10-12T14:00:00.000Z"}];
-            const mockSupabase="window.supabase={createClient:()=>({from:()=>({select:()=>({eq:()=>({order:()=>({limit:()=>Promise.resolve({data:"+JSON.stringify(mockData)+",error:null})})})})})})})};";
+            const mockSupabase="window.supabase={createClient:()=>({from:()=>{const chain={};for(const op of ['select','eq','order'])chain[op]=()=>chain;chain.limit=()=>Promise.resolve({data:"+JSON.stringify(mockData)+",error:null});return chain;}})};";
             await page.setRequestInterception(true);
             page.on("request",req=>{
               if(req.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js")){

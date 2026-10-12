@@ -1,0 +1,114 @@
+name: Testar pesquisa visual de destaques NovaPlay v021
+on:
+  push:
+    paths:
+      - .github/workflows/verify-featured-v021.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar JavaScript
+        run: |
+          node --check app.js
+          node --check admin/admin.js
+      - name: Preparar navegador de teste
+        run: npm install --no-audit --no-fund --no-save puppeteer-core@24.17.0
+      - name: Testar busca visual, séries, capa e exibição
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/novaplay-server.log 2>&1 &
+          cat > /tmp/featured-v021-test.cjs <<'JS'
+          
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          const DATA=[{"id":"11111111-2222-4333-8444-555555555555","title":"Arcane Dublado","kind":"movie","series_title":null,"episode_number":null,"genre":"Anime · Série","production_year":2021,"description":"Duas irmãs de cidades rivais.","video_path":null,"youtube_id":"M7lc1UVf-VE","google_drive_id":null,"google_drive_resource_key":null,"poster_path":null,"is_published":true,"catalog_only":false,"rights_reviewed":true,"quality_score":null,"quality_score_source":null,"quality_score_note":null,"quality_scored_at":null,"file_size_bytes":null,"mime_type":null,"created_at":"2026-10-10T00:00:00Z"}];
+          function mockScript(initial){
+           return [
+           "const rows="+JSON.stringify(DATA)+";",
+           "let featured="+JSON.stringify(initial)+";",
+           "window.__featuredSaved=()=>featured.slice();",
+           "window.supabase={createClient:()=>({",
+           "auth:{getUser:async()=>({data:{user:{id:'admin1',email:'owner@example.com'}},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},",
+           "rpc:async()=>({data:true,error:null}),",
+           "storage:{from:()=>({getPublicUrl:()=>({data:{publicUrl:'https://example.com/fallback.png'}})})},",
+           "from:(table)=>{const q={};",
+           "q.select=()=>q;q.eq=()=>q;q.gte=()=>q;q.order=()=>q;",
+           "q.range=async()=>({data:table==='novaplay_library'?rows:[],error:null});",
+           "q.maybeSingle=async()=>({data:table==='novaplay_featured'?{film_ids:featured}:table==='novaplay_admins'?{user_id:'admin1'}:null,error:null});",
+           "q.update=change=>{const up={};up.eq=()=>up;up.select=()=>up;",
+           "up.single=async()=>{featured=change.film_ids;return{data:{film_ids:featured},error:null}};return up;};",
+           "return q;}",
+           "})};"].join("");
+          }
+          (async()=>{
+           const browser=await puppeteer.launch({headless:true,executablePath:"/usr/bin/google-chrome",args:["--no-sandbox"]});
+           try{
+            const errors=[];
+            const page=await browser.newPage();
+            await page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            page.on("pageerror",e=>errors.push("admin: "+e.message));
+            await page.setRequestInterception(true);
+            const intercept=(mock)=>req=>{
+             if(req.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js"))
+              return req.respond({status:200,contentType:"text/javascript",body:mock});
+             if(req.url().startsWith("https://cdn.jsdelivr.net/"))
+              return req.respond({status:200,contentType:"text/javascript",body:""});
+             req.continue();
+            };
+            page.on("request",intercept(mockScript(["nosferatu"])));
+            await page.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:20000});
+            await page.waitForFunction(()=>!document.querySelector("#dashboard").hidden&&document.querySelector("#featured-results").querySelectorAll(".featured-candidate").length>0,{timeout:14000});
+            let info=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-innerWidth,initial:document.querySelector("#featured-list").innerText,results:document.querySelectorAll(".featured-candidate").length}));
+            assert(info.overflow<=2,"Overflow Android "+JSON.stringify(info));
+            assert(info.results>0&&info.results<=24);
+            assert(info.initial.includes("Nosferatu"));
+            console.log("FEATURED_VISUAL_INITIAL_OK",JSON.stringify(info));
+            await page.type("#featured-search","arcane");
+            await page.waitForFunction(()=>document.querySelectorAll(".featured-candidate").length===1,{timeout:3500});
+            const one=await page.$eval(".featured-candidate",x=>({title:x.textContent,src:x.querySelector("img").src}));
+            assert(one.title.includes("Arcane Dublado"));
+            assert(one.src.includes("arcane.png"),"Approved poster not referenced");
+            await page.$eval(".featured-candidate",b=>b.click());
+            assert.equal(await page.$eval("#featured-preview-title",x=>x.textContent),"Arcane Dublado");
+            assert.equal(await page.$eval("#featured-preview",x=>x.hidden),false);
+            assert.equal(await page.$eval("#featured-preview-image",x=>x.src.includes("arcane.png")),true);
+            await page.$eval("#featured-add",b=>b.click());
+            await page.waitForFunction(()=>document.querySelectorAll(".featured-entry").length===2&&document.querySelector("#featured-message").textContent.includes("salvos"),{timeout:8000});
+            assert.equal(await page.evaluate(()=>window.__featuredSaved()[1]),"upload-11111111-2222-4333-8444-555555555555");
+            console.log("FEATURED_POSTER_SEARCH_SAVE_OK");
+            await page.type("#featured-search","Pauline");
+            await page.waitForFunction(()=>document.querySelectorAll(".featured-candidate").length===1,{timeout:3500});
+            await page.$eval(".featured-candidate",b=>b.click());
+            assert.equal(await page.$eval("#featured-preview-title",x=>x.textContent),"Os Perigos de Pauline");
+            await page.$eval("#featured-add",b=>b.click());
+            await page.waitForFunction(()=>document.querySelectorAll(".featured-entry").length===3&&document.querySelector("#featured-message").textContent.includes("salvos"),{timeout:8000});
+            assert.equal(await page.evaluate(()=>window.__featuredSaved()[2]),"pauline");
+            await page.$eval('.featured-entry:nth-child(3) .featured-entry-actions button:first-child',b=>b.click());
+            await page.waitForFunction(()=>window.__featuredSaved()[1]==="pauline",{timeout:8000});
+            await page.$eval('#featured-type',sel=>{sel.value="series";sel.dispatchEvent(new Event("change",{bubbles:true}))});
+            const choices=await page.$$eval(".featured-candidate",xs=>xs.map(x=>x.textContent));
+            assert(choices.some(x=>x.includes("O Império Fantasma")),"Classic series missing");
+            console.log("FEATURED_SERIES_REORDER_FILTER_OK");
+            const viewer=await browser.newPage();
+            viewer.on("pageerror",e=>errors.push("viewer: "+e.message));
+            await viewer.setRequestInterception(true);
+            viewer.on("request",intercept(mockScript(["pauline","upload-11111111-2222-4333-8444-555555555555"])));
+            await viewer.goto("http://127.0.0.1:8765/",{waitUntil:"domcontentloaded",timeout:20000});
+            await viewer.waitForFunction(()=>document.querySelector("#hero-title").textContent==="Os Perigos de Pauline",{timeout:14000});
+            assert.equal(await viewer.$eval("#hero-genre",x=>x.textContent),"SÉRIE CLÁSSICA");
+            await viewer.$eval("#hero-play",b=>b.click());
+            await viewer.waitForFunction(()=>!document.querySelector("#player-layer").hidden,{timeout:5000});
+            const playing=await viewer.$eval("#player-heading",x=>x.textContent);
+            assert(playing.includes("Pauline"));
+            assert(!errors.length,JSON.stringify(errors));
+            console.log("FEATURED_SERIES_HERO_PLAY_OK");
+           }finally{await browser.close()}
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          
+          JS
+          node /tmp/featured-v021-test.cjs

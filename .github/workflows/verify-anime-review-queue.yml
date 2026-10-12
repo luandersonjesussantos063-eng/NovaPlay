@@ -1,0 +1,70 @@
+name: Testar fila privada de animes
+on:
+  push:
+    paths:
+      - .github/workflows/verify-anime-review-queue.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir JavaScript do painel
+        run: node --check admin/admin.js
+      - name: Preparar Chrome
+        run: npm install --no-audit --no-fund --no-save puppeteer-core@24.17.0
+      - name: Testar conferência de direitos pelo celular
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          cat > /tmp/verify-animes.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:"/usr/bin/google-chrome",args:["--no-sandbox"]});
+            const page=await browser.newPage();
+            await page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            const errors=[];page.on("pageerror",e=>errors.push(e.message));
+            const queue=[
+              {id:"00000000-0000-4000-8000-000000000001",title:"Arcane Legendado",kind:"series",audio_version:"subtitled",reference_url:"https://x.com/drivedeanimes/status/1825852992601374889",source_order:3,rights_status:"pending"},
+              {id:"00000000-0000-4000-8000-000000000002",title:"One Piece Filme 01",kind:"movie",audio_version:"unknown",reference_url:"https://x.com/drivedeanimes/status/1826364692735860992",source_order:28,rights_status:"pending"}
+            ];
+            const mock="window.supabase={createClient:()=>{const q="+JSON.stringify(queue)+";const api={auth:{getUser:async()=>({data:{user:{id:'admin-id',email:'owner@example.com'}},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},rpc:async()=>({data:true,error:null}),storage:{from:()=>({getPublicUrl:()=>({data:{publicUrl:''}})})},from:(table)=>{const chain={};chain.select=()=>chain;chain.eq=()=>chain;chain.order=()=>chain;chain.limit=async()=>({data:table==='novaplay_review_queue'?q:[],error:null});chain.range=async()=>({data:[],error:null});chain.maybeSingle=async()=>({data:{user_id:'admin-id'},error:null});chain.update=(change)=>({eq:async(_,id)=>{const target=q.find(x=>x.id===id);if(target)Object.assign(target,change);return{error:null}}});return chain}};return api}};";
+            new Function(mock);
+            await page.setRequestInterception(true);
+            page.on("request",req=>{
+              if(req.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js"))
+                return req.respond({status:200,contentType:"application/javascript",body:mock});
+              req.continue();
+            });
+            await page.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:20000});
+            await page.waitForFunction(()=>!document.querySelector("#dashboard").hidden&&document.querySelectorAll(".queue-item").length===2,{timeout:15000});
+            const state=await page.evaluate(()=>({
+              count:document.querySelector("#queue-count").textContent,
+              elements:document.querySelectorAll(".queue-item").length,
+              noPlayer:!document.querySelector("#queue-items video")&&!document.querySelector("#queue-items iframe"),
+              statuses:[...document.querySelectorAll(".queue-state")].map(x=>x.textContent),
+              links:[...document.querySelectorAll(".queue-actions a")].map(x=>x.href),
+              overflow:document.documentElement.scrollWidth-innerWidth
+            }));
+            console.log("ANIME_DRAFTS_PANEL "+JSON.stringify(state));
+            assert(state.count.includes("2 títulos")&&state.elements===2&&state.noPlayer);
+            assert(state.statuses.every(x=>x.includes("pendentes")));
+            assert(state.overflow<=2,"Layout overflows Android viewport");
+            await page.type("#queue-search","One Piece");
+            assert.equal(await page.$$eval(".queue-item",xs=>xs.length),1);
+            await page.$eval("#queue-search",e=>{e.value="";e.dispatchEvent(new Event("input",{bubbles:true}))});
+            await page.evaluate(()=>{window.confirm=()=>true});
+            await page.$eval(".queue-item .queue-actions button",b=>b.click());
+            await page.waitForFunction(()=>[...document.querySelectorAll(".queue-state")].some(x=>x.textContent==="Direitos conferidos"),{timeout:9000});
+            const ready=await page.$eval(".queue-actions button.primary",x=>x.textContent);
+            assert.equal(ready,"Preparar cadastro");
+            console.log("ANIME_RIGHTS_REVIEW_OK");
+            assert.equal(errors.length,0,JSON.stringify(errors));
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/verify-animes.cjs

@@ -1,0 +1,36 @@
+name: Diagnosticar transmissoes
+on:
+  push:
+    paths:
+      - '.github/workflows/check-streams.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verificar HLS oficial e incorporação
+        shell: bash
+        run: |
+          urls=(
+            "https://stream3.camara.gov.br/tv1/manifest.m3u8"
+            "https://stream3.camara.gov.br/tv2/manifest.m3u8"
+            "https://tvbrasil-stream.ebc.com.br/index.m3u8"
+            "https://player-tvcultura.stream.uol.com.br/live/tvcultura.m3u8"
+            "https://www.camara.leg.br/tv/aovivo/embed"
+            "https://www2.camara.leg.br/camaranoticias/tv/embedAoVivo.html"
+            "https://aovivo.ebc.com.br/embed-tvbrasil.html"
+            "https://culturaplay.tvcultura.com.br/channels/14/embed"
+          )
+          for url in "${urls[@]}"; do
+            echo "::group::VERIFICAR ${url}"
+            curl -sS -L --max-time 14 -o /tmp/stream-resp -D /tmp/stream-head -w 'HTTP=%{http_code} Tipo=%{content_type} URLFinal=%{url_effective} Bytes=%{size_download}\n' -H 'Origin: https://novabytesolucoes.com.br' -H 'User-Agent: Mozilla/5.0' "$url" || echo 'Erro de conexão'
+            echo 'Headers relevantes:'
+            grep -Ei '^(HTTP/|access-control-|x-frame-options:|content-security-policy:|location:|content-type:)' /tmp/stream-head | head -20 || :
+            echo 'Inicio da resposta:'
+            head -c 120 /tmp/stream-resp | cat -v || :
+            echo
+            echo "::endgroup::"
+          done

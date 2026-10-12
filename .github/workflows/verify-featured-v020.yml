@@ -59,7 +59,7 @@ jobs:
             page.on("pageerror",e=>errors.push(e.message));
             await page.setRequestInterception(true);page.on("request",interceptor);
             await page.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:20000});
-            await page.waitForFunction(()=>!document.querySelector("#dashboard").hidden&&document.querySelectorAll(".featured-entry").length===2,{timeout:16000});
+            await page.waitForFunction(()=>!document.querySelector("#dashboard").hidden&&document.querySelectorAll(".featured-entry").length===2,{timeout:16000}).catch(async e=>{console.log("ADMIN_DIAG",JSON.stringify(await page.evaluate(()=>({loading:document.querySelector("#loading")?.hidden,dashboard:document.querySelector("#dashboard")?.hidden,login:document.querySelector("#login-view")?.hidden,pending:document.querySelector("#pending-view")?.hidden,featured:document.querySelectorAll(".featured-entry").length,featuredMessage:document.querySelector("#featured-message")?.textContent,authMessage:document.querySelector("#auth-message")?.textContent,uploadMessage:document.querySelector("#upload-message")?.textContent,body:document.body.innerText.slice(0,750)}))),JSON.stringify(errors));throw e});
             const initial=await page.evaluate(()=>({
              titles:[...document.querySelectorAll(".featured-entry-info strong")].map(x=>x.textContent),
              choices:[...document.querySelectorAll("#featured-film-select option")].map(x=>x.textContent),

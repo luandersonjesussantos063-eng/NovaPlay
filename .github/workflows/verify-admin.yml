@@ -1,0 +1,78 @@
+name: Verificar painel NovaPlay
+on:
+  push:
+    paths:
+      - '.github/workflows/verify-admin.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar sintaxe
+        run: |
+          node --check app.js
+          node --check catalog.js
+          node --check admin/admin.js
+          node --check sw.js
+      - name: Preparar Chrome
+        run: |
+          npm install --no-save --no-audit --no-fund puppeteer-core@24.17.0
+      - name: Conferir painel e catálogo público
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/np-http.log 2>&1 &
+          cat > /tmp/verify.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          (async()=>{
+            const browser=await puppeteer.launch({executablePath:"/usr/bin/google-chrome",headless:true,args:["--no-sandbox"]});
+            const page=await browser.newPage();const errors=[];
+            page.on("pageerror",e=>errors.push(String(e)));
+            await page.setViewport({width:393,height:852,deviceScaleFactor:1,isMobile:true,hasTouch:true});
+            await page.goto("http://127.0.0.1:8765/admin/",{waitUntil:"networkidle2",timeout:30000});
+            await page.waitForFunction(()=>document.getElementById("loading").hidden,{timeout:15000});
+            const p=await page.evaluate(()=>({
+              loginVisible:!document.getElementById("login-view").hidden,
+              adminHidden:document.getElementById("dashboard").hidden,
+              libLoaded:!!window.supabase?.createClient,
+              tusLoaded:!!window.tus?.Upload,
+              docWidth:document.documentElement.scrollWidth,
+              width:innerWidth
+            }));
+            console.log("ADMIN_PANEL "+JSON.stringify(p));
+            assert(p.loginVisible&&p.adminHidden,"O upload não está protegido por login");
+            assert(p.libLoaded,"A biblioteca Supabase não abriu");
+            assert(p.tusLoaded,"O cliente de upload retomável não abriu");
+            assert(p.docWidth<=p.width+2,"Painel causa rolagem horizontal");
+            await page.goto("http://127.0.0.1:8765/",{waitUntil:"networkidle2",timeout:30000});
+            await page.waitForSelector(".shelf .poster-card",{timeout:16000});
+            await page.waitForFunction(()=>!!document.querySelector(".shelf .poster-card"),{timeout:15000});
+            const pub=await page.evaluate(()=>({
+              covers:document.querySelectorAll(".shelf .poster-card").length,
+              supabase:!!window.supabase?.createClient,
+              adminButton:!!document.querySelector("#profile-trigger"),
+              remoteCall:!!document.querySelector("script[src*='supabase']"),
+              search:!!document.querySelector("#search-input")
+            }));
+            console.log("PUBLIC_CATALOG "+JSON.stringify(pub));
+            assert(pub.covers>=9&&pub.supabase&&pub.remoteCall&&pub.search);
+            const denied = await page.evaluate(async()=>{
+              const api=window.supabase.createClient("https://vajlhodqxskozuxxlujv.supabase.co","sb_publishable_uT0b4y0Bex1k1QWZoyIfKg_K0pm-yS3",{auth:{persistSession:false}});
+              const a=await api.from("novaplay_library").select("id,is_published");
+              const b=await api.from("novaplay_admins").select("user_id");
+              return{publicError:a.error?.message||null,publicCount:a.data?.length??null,privateError:b.error?.message||null,hasDraft:a.data?.some(x=>!x.is_published)||false};
+            });
+            console.log("RLS_ANON "+JSON.stringify(denied));
+            assert(!denied.publicError,"Leitura do catálogo falhou");
+            assert(!denied.hasDraft,"Rascunhos visíveis anonimamente");
+            assert(denied.privateError,"Lista de administradores exposta sem login");
+            console.log("BROWSER_CHECK_OK");
+            assert.equal(errors.length,0,"Erros de JS "+JSON.stringify(errors));
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/verify.cjs

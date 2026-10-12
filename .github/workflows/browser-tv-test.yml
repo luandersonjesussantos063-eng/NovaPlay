@@ -36,12 +36,12 @@ jobs:
               await page.waitForSelector(".card .watch");
               await page.evaluate(i=>document.querySelectorAll(".card .watch")[i].click(),idx);
               try{
-                await page.waitForFunction(()=>{const v=document.getElementById("video");return v&&v.readyState>=2;},{timeout:24000});
+                await page.waitForFunction(()=>{const v=document.getElementById("video");return v&&v.readyState>=3 && v.currentTime>0.5;},{timeout:24000});
                 const state=await page.evaluate(()=>({ready:document.querySelector("#video").readyState,network:document.querySelector("#video").networkState,status:document.querySelector("#player-status").textContent,error:document.querySelector("#video-error").textContent,time:document.querySelector("#video").currentTime}));
-                console.log("RESULT "+title+" OK "+JSON.stringify(state));
+                console.log("RESULT "+title+" OK "+JSON.stringify(state)+" issues="+JSON.stringify(issues));
                 n++;
               }catch(e){
-                const state=await page.evaluate(()=>({ready:document.querySelector("#video").readyState,network:document.querySelector("#video").networkState,status:document.querySelector("#player-status").textContent,error:document.querySelector("#video-error").textContent}));
+                const state=await page.evaluate(()=>({ready:document.querySelector("#video").readyState,network:document.querySelector("#video").networkState,status:document.querySelector("#player-status").textContent,error:document.querySelector("#video-error").textContent,paused:document.querySelector("#video").paused,time:document.querySelector("#video").currentTime}));
                 console.log("RESULT "+title+" FAILED "+JSON.stringify(state)+" issues="+JSON.stringify(issues));
               }
               await page.close();

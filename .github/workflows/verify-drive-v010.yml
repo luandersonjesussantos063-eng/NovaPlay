@@ -86,11 +86,20 @@ jobs:
             assert(state.shown&&state.cinema&&state.drive&&state.statusHidden&&state.customControlsHidden&&!state.frameHidden);
             assert(state.frameSrc==="https://drive.google.com/file/d/"+id+"/preview?resourcekey="+key);
             assert.equal(state.title,"Filme do Google Drive");
-            await page.click("#player-close");
-            await page.click(".mobile-chips button[data-nav='series']");
-            await page.waitForSelector("#category-grid .poster-card");
-            const series=await page.$$eval("#category-grid .poster-card h3", els=>els.map(x=>x.textContent));
-            assert(series.includes("Série Google"),"Google Drive episode missing from series");
+            await page.evaluate(()=>{
+              document.querySelector("#player-close").click();
+              document.querySelector(".mobile-chips button[data-nav='series']").click();
+            });
+            const seriesState=await page.evaluate(()=>({
+              layerHidden:document.querySelector("#player-layer").hidden,
+              pageHidden:document.querySelector("#view-category").hidden,
+              heading:document.querySelector("#category-heading").textContent,
+              titles:[...document.querySelectorAll("#category-grid .poster-card h3")].map(x=>x.textContent),
+              firstRows:[...document.querySelectorAll(".shelf-title")].map(x=>x.textContent)
+            }));
+            console.log("GOOGLE_DRIVE_SERIES "+JSON.stringify(seriesState));
+            assert(!seriesState.pageHidden,"Series section did not open");
+            assert(seriesState.titles.includes("Série Google"),"Google Drive episode missing from series");
             const auth=await browser.newPage();
             await auth.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
             await auth.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:15000});

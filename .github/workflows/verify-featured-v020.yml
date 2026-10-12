@@ -38,7 +38,7 @@ jobs:
             q.select=()=>q;q.eq=()=>q;q.order=()=>q;q.gte=()=>q;q.in=()=>q;
             q.maybeSingle=async()=>({data:table==="novaplay_featured"?{film_ids:saved}:table==="novaplay_admins"?{user_id:"admin-mock"}:null,error:null});
             q.range=async()=>({data:table==="novaplay_library"?[row]:[],error:null});
-            q.update=change=>({eq:()=>({select:()=>({single:async()=>{saved=change.film_ids;return{data:{film_ids:saved},error:null}}}})})});
+            q.update=change=>{const up={};up.eq=()=>up;up.select=()=>up;up.single=async()=>{saved=change.film_ids;return{data:{film_ids:saved},error:null}};return up;};
             return q;
            }
           })};

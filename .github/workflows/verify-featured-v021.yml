@@ -57,8 +57,8 @@ jobs:
              if(req.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js"))
               return req.respond({status:200,contentType:"text/javascript",body:mock});
              if(req.url().includes("/assets/review-covers/"))
-    return req.respond({status:200,contentType:"image/png",body:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+YsUEiAAAAABJRU5ErkJggg==","base64")});
-   if(req.url().startsWith("https://cdn.jsdelivr.net/"))
+              return req.respond({status:200,contentType:"image/png",body:Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+YsUEiAAAAABJRU5ErkJggg==","base64")});
+             if(req.url().startsWith("https://cdn.jsdelivr.net/"))
               return req.respond({status:200,contentType:"text/javascript",body:""});
              req.continue();
             };

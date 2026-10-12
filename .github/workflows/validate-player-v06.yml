@@ -50,13 +50,13 @@ jobs:
             const playing=await page.evaluate(()=>{
               const p=document.querySelector("#player-layer");
               const rect=p.getBoundingClientRect();
-              return {visible:!p.hidden,cinema:p.classList.contains("cinema"),rotated:p.classList.contains("force-landscape"),requested:window.__requestedFullScreen||false,width:Math.round(rect.width),height:Math.round(rect.height),viewport:[innerWidth,innerHeight],detailsHidden:document.querySelector("#detail-layer").hidden};
+              return {visible:!p.hidden,cinema:p.classList.contains("cinema"),rotated:p.classList.contains("force-landscape"),requested:window.__requestedFullScreen||false,width:Math.round(rect.width),height:Math.round(rect.height),rawWidth:Math.round(parseFloat(getComputedStyle(p).width)),rawHeight:Math.round(parseFloat(getComputedStyle(p).height)),rotation:getComputedStyle(p).transform,viewport:[innerWidth,innerHeight],detailsHidden:document.querySelector("#detail-layer").hidden};
             });
             console.log("LANDSCAPE_FALLBACK "+JSON.stringify(playing));
             assert(playing.visible&&playing.cinema&&playing.detailsHidden,"O player não abriu direto");
             assert(playing.requested,"Fullscreen não foi solicitado");
             assert(playing.rotated,"CSS de orientação paisagem não foi acionado");
-            assert(playing.width>playing.height,"O modo paisagem não ocupa a largura correta");
+            assert(playing.rawWidth>playing.rawHeight&&playing.rotation!=="none","O player não foi girado para visualização horizontal");
             await page.click("#player-close");
             assert(await page.$eval("#player-layer",x=>x.hidden&&!x.classList.contains("force-landscape")),"Não voltou ao retrato ao fechar");
             const before=await page.$eval("#detail-layer",x=>x.hidden);

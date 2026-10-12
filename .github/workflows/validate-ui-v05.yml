@@ -1,0 +1,94 @@
+name: Validar interface NovaPlay v0.5
+on:
+  push:
+    paths:
+      - '.github/workflows/validate-ui-v05.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar JavaScript
+        run: |
+          node --check app.js
+          node --check catalog.js
+          node --check sw.js
+      - name: Preparar navegador
+        run: |
+          npm install --no-save --no-audit --no-fund puppeteer-core@24.17.0
+          which google-chrome || which google-chrome-stable || true
+      - name: Testar navegacao, imagens e player
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          cat > /tmp/ui-v05.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          (async()=>{
+            const b=await puppeteer.launch({executablePath:"/usr/bin/google-chrome",headless:true,args:["--no-sandbox","--autoplay-policy=no-user-gesture-required"]});
+            const errs=[];
+            const page=await b.newPage();
+            page.on("pageerror",e=>errs.push(String(e)));
+            await page.setViewport({width:393,height:852,deviceScaleFactor:1,isMobile:true,hasTouch:true});
+            await page.goto("http://127.0.0.1:8765",{waitUntil:"networkidle2",timeout:30000});
+            await page.waitForSelector(".shelf .poster-card",{timeout:12000});
+            const home=await page.evaluate(()=>{
+              const a=[...document.querySelectorAll(".shelf")].map(x=>({title:x.querySelector(".shelf-title").textContent,items:x.querySelectorAll(".poster-card").length}));
+              const images=[...document.querySelectorAll(".poster-card img")];
+              return{rows:a,hero:document.querySelector("#hero-title").textContent,viewport:innerWidth,scroll:document.documentElement.scrollWidth,images:images.length,loaded:images.filter(x=>x.complete&&x.naturalWidth>0).length,navVisible:getComputedStyle(document.querySelector(".mobile-nav")).display}
+            });
+            console.log("HOME "+JSON.stringify(home));
+            assert(home.rows.length>=4,"Home sem prateleiras");
+            assert(home.images>=9,"Capas faltando");
+            assert(home.loaded===home.images,"Algumas capas não carregaram");
+            assert(home.scroll<=home.viewport+2,"Rolagem horizontal inesperada");
+            assert(home.navVisible==="flex","Menu mobile ausente");
+            await page.click(".shelf .channel-card .cover-btn");
+            assert(await page.$eval("#detail-layer",x=>!x.hidden),"Detalhes não abriu");
+            assert.equal(await page.$eval("#detail-title",x=>x.textContent),"TV Câmara");
+            await page.click("#close-details");
+            await page.click('[data-nav="series"].mobile-nav-item');
+            await page.waitForSelector("#category-grid .poster-card");
+            assert.equal(await page.$$eval("#category-grid .poster-card",x=>x.length),2,"Séries não agrupadas");
+            await page.click("#category-grid .poster-card .cover-btn");
+            assert.equal(await page.$$eval("#episode-list .episode",x=>x.length),9,"Episódios de Pauline ausentes");
+            await page.click("#detail-favorite");
+            await page.click("#close-details");
+            await page.click('[data-nav="favoritos"].mobile-nav-item');
+            assert.equal(await page.$$eval("#category-grid .poster-card",x=>x.length),1,"Minha lista falhou");
+            await page.reload({waitUntil:"networkidle2"});
+            await page.click('[data-nav="favoritos"].mobile-nav-item');
+            assert.equal(await page.$$eval("#category-grid .poster-card",x=>x.length),1,"Minha lista não persistiu");
+            await page.click('[data-nav="buscar"].mobile-nav-item');
+            await page.type("#search-input","Nosferatu");
+            assert.equal(await page.$$eval("#search-results .poster-card",x=>x.length),1,"Busca não filtrou");
+            await page.click('[data-nav="inicio"].mobile-nav-item');
+            await page.evaluate(()=>{localStorage.setItem("novaplay-progress-v1",JSON.stringify({nosferatu:{position:240,duration:3600,updated:Date.now()}}))});
+            await page.reload({waitUntil:"networkidle2"});
+            assert((await page.$eval(".shelf .shelf-title",x=>x.textContent)).includes("Continuar"),"Continuar assistindo não apareceu");
+            console.log("LAYOUT_AND_INTERACTIONS_OK");
+            for (const title of ["TV Câmara","TV Brasil","TV Cultura"]){
+              const pg=await b.newPage();
+              await pg.goto("http://127.0.0.1:8765",{waitUntil:"domcontentloaded",timeout:30000});
+              await pg.waitForSelector(".shelf .channel-card .cover-btn");
+              const idx=["TV Câmara","TV Brasil","TV Cultura"].indexOf(title);
+              await pg.evaluate(i=>document.querySelectorAll(".shelf .channel-card .cover-btn")[i].click(),idx);
+              await pg.click("#detail-play");
+              try {
+                await pg.waitForFunction(()=>{const v=document.querySelector("#video");return v&&v.readyState>=3&&v.currentTime>.3;},{timeout:26000});
+                console.log("TV_OK "+title+" "+JSON.stringify(await pg.evaluate(()=>({ready:document.querySelector("#video").readyState,time:document.querySelector("#video").currentTime}))));
+              }catch(ex){
+                const info=await pg.evaluate(()=>({ready:document.querySelector("#video").readyState,status:document.querySelector("#player-status").textContent,error:document.querySelector("#player-error").textContent}));
+                throw Error("TV_FAIL "+title+" "+JSON.stringify(info));
+              }finally{await pg.close()}
+            }
+            console.log("JS_ERRORS "+JSON.stringify(errs));
+            assert.equal(errs.length,0,"Erros JS no navegador");
+            await b.close();
+          })().catch(e=>{console.error(e.stack||e);process.exitCode=1});
+          JS
+          node /tmp/ui-v05.cjs

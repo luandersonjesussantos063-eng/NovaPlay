@@ -36,6 +36,8 @@ jobs:
             await page.setViewport({width:393,height:852,deviceScaleFactor:1,isMobile:true,hasTouch:true});
             await page.goto("http://127.0.0.1:8765",{waitUntil:"networkidle2",timeout:30000});
             await page.waitForSelector(".shelf .poster-card",{timeout:12000});
+            await page.evaluate(()=>document.querySelectorAll(".poster-card img").forEach(img=>img.loading="eager"));
+            await page.waitForFunction(()=>[...document.querySelectorAll(".poster-card img")].every(img=>img.complete&&img.naturalWidth>0),{timeout:12000});
             const home=await page.evaluate(()=>{
               const a=[...document.querySelectorAll(".shelf")].map(x=>({title:x.querySelector(".shelf-title").textContent,items:x.querySelectorAll(".poster-card").length}));
               const images=[...document.querySelectorAll(".poster-card img")];
@@ -89,6 +91,6 @@ jobs:
             console.log("JS_ERRORS "+JSON.stringify(errs));
             assert.equal(errs.length,0,"Erros JS no navegador");
             await b.close();
-          })().catch(e=>{console.error(e.stack||e);process.exitCode=1});
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
           JS
           node /tmp/ui-v05.cjs

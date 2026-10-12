@@ -392,7 +392,7 @@ $("close-details").onclick=closeDetails;
  $("detail-back").onclick=closeDetails;
 document.querySelectorAll("[data-close='details']").forEach(x=>x.addEventListener("click",closeDetails));
 $("search-trigger").onclick=()=>navigate("buscar");
-$("profile-trigger").onclick=()=>toast("NovaPlay V 0.6 · Catálogo grátis, sem cadastro");
+$("profile-trigger").onclick=()=>{window.location.href="./admin/"};
 $("search-input").addEventListener("input",renderSearch);
 $("brand-link").addEventListener("click",e=>{e.preventDefault();navigate("inicio")});
 document.querySelectorAll("[data-nav]").forEach(btn=>btn.addEventListener("click",()=>navigate(btn.dataset.nav)));

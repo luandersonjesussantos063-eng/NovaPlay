@@ -131,6 +131,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.75;strok
 .toast{position:fixed;bottom:92px;left:50%;transform:translate(-50%,30px);background:#263c5c;border:1px solid #547aaa;color:white;z-index:300;border-radius:12px;padding:10px 18px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:0 8px 32px #0006}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .app-footer{border-top:1px solid #ffffff10;padding:45px clamp(18px,4.2vw,80px) 30px;color:#667f9b;font-size:11px;line-height:1.6}
+.mobile-chips{display:none}
 .mobile-nav{display:none}
 @media(max-width:1030px){.desktop-nav{gap:5px}.nav-option{font-size:12px}.app-header{gap:20px}.hero{min-height:560px}.shelf{margin-bottom:33px}.hero-dots{bottom:12%}}
 @media(max-width:760px){
@@ -166,7 +167,7 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.75;strok
 .poster-card p{font-size:11px}
 .channel-card{flex-basis:252px}
 .channel-card .cover{aspect-ratio:16/9}
-.category-intro{padding:99px 18px 23px}
+.category-intro{padding:145px 18px 23px}
 .category-intro h1{font-size:32px}
 .category-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:23px 10px;padding:14px 18px 100px}
 .category-grid .channel-card{grid-column:span 2}
@@ -189,6 +190,10 @@ svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.75;strok
 .player-info{padding:0 5px;flex-direction:column}
 .player-info h2{font-size:18px}
 .player-note,.source-link{margin-left:5px;margin-right:5px}
+.mobile-chips{display:flex;align-items:center;gap:9px;position:fixed;top:64px;left:0;right:0;z-index:48;overflow-x:auto;scrollbar-width:none;padding:7px 17px 10px;background:linear-gradient(180deg,#09101eec 45%,#09101e00);white-space:nowrap}
+.mobile-chips::-webkit-scrollbar{display:none}
+.mobile-chips button{background:#1c2941d8;border:1px solid #61728c78;color:#e1eaf7;font-size:12px;font-weight:650;border-radius:100px;padding:8px 16px}
+.mobile-chips button.active{background:#4e75d0;border-color:#7ba4f8;color:#fff}
 .mobile-nav{display:flex;position:fixed;z-index:55;bottom:0;left:0;right:0;justify-content:space-around;align-items:center;background:#111a2bf5;backdrop-filter:blur(20px);border-top:1px solid #7687a330;padding:8px 3px calc(8px + env(safe-area-inset-bottom))}
 .mobile-nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#9eaec7;background:transparent;border:0;min-width:55px;padding:6px 4px;font-size:10px;font-weight:600}
 .mobile-nav-item svg{width:21px;height:21px}

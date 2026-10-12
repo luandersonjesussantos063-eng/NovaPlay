@@ -1,0 +1,31 @@
+name: Conferir links de curtas
+on:
+  push:
+    paths: ['.github/workflows/check-short-films.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspecionar conexões das fontes abertas
+        shell: bash
+        env:
+          URLS_JSON: '["https://commons.wikimedia.org/wiki/Special:Redirect/file/Coffee%20Run%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/WING%20IT!%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Caminandes%20-%20Gran%20Dillama%20-%20Blender%20Foundation''s%20new%20Open%20Movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Spring%20-%20Blender%20Open%20Movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Glass%20Half%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Charge%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Sprite%20Fright%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Caminandes-%20Llama%20Drama%20-%20Short%20Movie.ogv","https://commons.wikimedia.org/wiki/Special:Redirect/file/HERO%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/The%20Daily%20Dweebs%20-%20Blender%20Open%20Movie-full%20movie.webm","https://commons.wikimedia.org/wiki/Special:Redirect/file/Cosmos%20Laundromat%20-%20First%20Cycle%20-%20Official%20Blender%20Foundation%20release.webm","https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4","https://storage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4","https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"]'
+        run: |
+          python3 - <<'PY'
+          import os, json, concurrent.futures, subprocess
+          urls=json.loads(os.environ['URLS_JSON'])
+          def probe(pair):
+            idx,url=pair
+            cmd=['curl','-LsS','-I','--retry','1','--max-time','16','-A','NovaPlay/0.9 (testing CC media links; contact webmaster)','-o','/dev/null','-w','%{http_code}|%{content_type}|%{url_effective}',url]
+            try:
+              p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=22)
+              return str(idx)+'|'+p.stdout.strip()+'|'+p.stderr.strip()[:200]
+            except Exception as e:return str(idx)+'|ERROR|'+str(e)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+            for result in pool.map(probe,enumerate(urls)):
+              print('SHORT_RESULT '+result,flush=True)
+          PY

@@ -65,7 +65,7 @@ jobs:
             assert(yt.frame.includes("www.youtube-nocookie.com/embed/M7lc1UVf-VE"));
             assert(yt.footer==="none");
             await page.click("#player-close");
-            await page.click(".shelf .poster-card:not(.channel-card) .card-direct-play");
+            await page.click(".poster-card[data-id='lua'] .card-direct-play");
             const native=await page.evaluate(()=>{
               const layer=document.querySelector("#player-layer");
               return {open:!layer.hidden,cinema:layer.classList.contains("cinema"),

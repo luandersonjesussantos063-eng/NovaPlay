@@ -48,6 +48,7 @@ jobs:
             assert(p.libLoaded,"A biblioteca Supabase não abriu");
             assert(p.tusLoaded,"O cliente de upload retomável não abriu");
             assert(p.docWidth<=p.width+2,"Painel causa rolagem horizontal");
+            assert(await page.$eval("#poster-file",x=>x.accept.includes("image/jpeg")),"Seleção de capa não disponível");
             await page.goto("http://127.0.0.1:8765/",{waitUntil:"networkidle2",timeout:30000});
             await page.waitForSelector(".shelf .poster-card",{timeout:16000});
             await page.waitForFunction(()=>!!document.querySelector(".shelf .poster-card"),{timeout:15000});

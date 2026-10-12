@@ -149,6 +149,29 @@ function shelf(title,items,key,withLive=false){
  items.forEach(item=>track.append(card(item,item.kind==="tv")));
  section.append(head,track);return section;
 }
+
+const genreOrder=["Animação","Ação","Aventura","Comédia","Drama","Fantasia","Ficção científica","Romance","Suspense","Terror","Documentário","Não classificados"];
+let selectedGenre="Todos";
+function normalizeGenre(value){return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase()}
+function primaryGenre(film){
+ const value=normalizeGenre(film.category).trim();
+ if(!value||/^(importado|autoral|outros|sem genero|a classificar|producao independente)/.test(value))return "Não classificados";
+ const names=[
+ ["Animação",/animac|desenho|infantil/],["Ação",/acao|policial|artes marciais/],
+ ["Aventura",/aventura/],["Comédia",/comedia|humor/],["Drama",/drama/],
+ ["Fantasia",/fantasia|magia/],["Ficção científica",/ficcao cientifica|sci.?fi/],
+ ["Romance",/romance|romant/],["Suspense",/suspense|misterio/],
+ ["Terror",/terror|horror/],["Documentário",/documentario/]
+ ];
+ for(const [name,pattern] of names){if(pattern.test(value))return name}
+ return "Não classificados";
+}
+function genreGroups(){
+ const groups=new Map(genreOrder.map(name=>[name,[]]));
+ for(const item of db.films.filter(x=>x.kind==="film"&&!x.catalogOnly))
+  groups.get(primaryGenre(item)).push(item);
+ return groups;
+}
 function renderRows(){
  const holder=$("home-rows");holder.replaceChildren();
  const blocks=[
@@ -157,6 +180,9 @@ function renderRows(){
  ["Produções da NovaPlay",uploadedCatalog.filter(x=>!x.catalogOnly),"filmes",false],
  ["Filmes clássicos",db.films,"filmes",false],
  ["Séries clássicas",db.series,"series",false],
+ ...genreOrder.filter(name=>name!=="Não classificados")
+  .map(name=>[name,genreGroups().get(name),"genero:"+name,false]).filter(b=>b[1].length),
+ ["Ainda sem gênero",genreGroups().get("Não classificados").slice(0,80),"genero:Não classificados",false],
  ["Adicionados ao catálogo",[...db.films.filter(x=>!x.catalogOnly).slice().reverse(),...db.series,...db.films.filter(x=>x.catalogOnly)],"filmes",false],
  ["Minha lista",all.filter(x=>favorite.has(x.id)),"favoritos",false]
  ];
@@ -201,8 +227,26 @@ function renderCategory(kind){
  const conf=categories[kind]||categories.filmes;
  $("category-kicker").textContent=conf[0];$("category-heading").textContent=conf[1];$("category-subtitle").textContent=conf[2];
  const content=$("category-grid");content.replaceChildren();
- const list=kind==="favoritos"?all.filter(x=>favorite.has(x.id)):conf[3];
- if(!list.length)content.append(empty("Sua lista está vazia","Abra um filme, série ou canal e toque em 'Minha lista' para salvar aqui."));
+ let list=kind==="favoritos"?all.filter(x=>favorite.has(x.id)):conf[3];
+ const filters=$("genre-filter-panel"),buttons=$("genre-filter-buttons");
+ filters.hidden=kind!=="filmes";
+ if(kind==="filmes"){
+  buttons.replaceChildren();
+  const groups=genreGroups();
+  for(const name of ["Todos",...genreOrder.filter(name=>groups.get(name).length)]){
+   const count=name==="Todos"?db.films.filter(x=>!x.catalogOnly).length:groups.get(name).length;
+   const b=document.createElement("button");b.type="button";
+   b.className="genre-chip"+(selectedGenre===name?" active":"");
+   b.setAttribute("aria-pressed",String(selectedGenre===name));
+   b.textContent=name+" ("+count+")";
+   b.onclick=()=>{selectedGenre=name;renderCategory("filmes")};
+   buttons.append(b);
+  }
+  list=selectedGenre==="Todos"?db.films:groups.get(selectedGenre)||[];
+  $("category-heading").textContent=selectedGenre==="Todos"?"Filmes por gênero":selectedGenre;
+  $("genre-filter-count").textContent=list.length+" título"+(list.length===1?"":"s")+" nesta categoria";
+ }
+ if(!list.length)content.append(empty("Nenhum título nesta categoria","Selecione outro gênero ou classifique títulos no painel administrativo."));
  else list.forEach(item=>content.append(card(item,item.kind==="tv")));
 }
 function renderSearch(){
@@ -214,7 +258,10 @@ function renderSearch(){
  else list.forEach(x=>results.append(card(x,x.kind==="tv")));
 }
 function navigate(page){
- const chosen=page==="buscar"?"buscar":(categories[page]?page:"inicio");
+ const genreLink=typeof page==="string"&&page.startsWith("genero:");
+ if(genreLink)selectedGenre=page.slice("genero:".length);
+ else if(page==="filmes"&&view!=="filmes")selectedGenre="Todos";
+ const chosen=genreLink?"filmes":page==="buscar"?"buscar":(categories[page]?page:"inicio");
  view=chosen;
  $("view-home").hidden=chosen!=="inicio";
  $("view-category").hidden=chosen==="inicio"||chosen==="buscar";

@@ -1,0 +1,54 @@
+name: Testar TV no navegador
+on:
+  push:
+    paths:
+      - '.github/workflows/browser-tv-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar navegador de teste
+        run: |
+          npm install --no-save --no-audit --no-fund puppeteer-core@24.17.0
+          which google-chrome || which google-chrome-stable || which chromium
+      - name: Validar 3 canais oficiais em Chrome
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/novaplay-http.log 2>&1 &
+          cat > /tmp/novaplay-test.cjs <<'JS'
+          const p=require(process.cwd()+"/node_modules/puppeteer-core");
+          (async()=>{
+            const bin=process.env.CHROME_BIN||"/usr/bin/google-chrome";
+            const b=await p.launch({executablePath:bin,headless:true,args:["--no-sandbox","--disable-setuid-sandbox","--autoplay-policy=no-user-gesture-required"]});
+            let n=0;
+            for(const [title,idx] of [["TV Câmara",0],["TV Brasil",1],["TV Cultura",2]]){
+              const page=await b.newPage();
+              await page.setViewport({width:393,height:852});
+              const issues=[];
+              page.on("requestfailed",req=>{if(issues.length<5)issues.push(req.url()+" "+req.failure()?.errorText)});
+              page.on("pageerror",e=>{if(issues.length<5)issues.push("JS "+String(e))});
+              await page.goto("http://127.0.0.1:8765",{waitUntil:"domcontentloaded",timeout:25000});
+              await page.waitForSelector(".card .watch");
+              await page.evaluate(i=>document.querySelectorAll(".card .watch")[i].click(),idx);
+              try{
+                await page.waitForFunction(()=>{const v=document.getElementById("video");return v&&v.readyState>=2;},{timeout:24000});
+                const state=await page.evaluate(()=>({ready:document.querySelector("#video").readyState,network:document.querySelector("#video").networkState,status:document.querySelector("#player-status").textContent,error:document.querySelector("#video-error").textContent,time:document.querySelector("#video").currentTime}));
+                console.log("RESULT "+title+" OK "+JSON.stringify(state));
+                n++;
+              }catch(e){
+                const state=await page.evaluate(()=>({ready:document.querySelector("#video").readyState,network:document.querySelector("#video").networkState,status:document.querySelector("#player-status").textContent,error:document.querySelector("#video-error").textContent}));
+                console.log("RESULT "+title+" FAILED "+JSON.stringify(state)+" issues="+JSON.stringify(issues));
+              }
+              await page.close();
+            }
+            await b.close();
+            console.log("PLAYABLE "+n+"/3");
+            if(n<3)process.exitCode=1;
+          })().catch(e=>{console.error(e);process.exitCode=1})
+          JS
+          node /tmp/novaplay-test.cjs

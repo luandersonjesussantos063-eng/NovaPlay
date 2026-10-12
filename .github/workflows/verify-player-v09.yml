@@ -1,0 +1,93 @@
+name: Testar controles do player V 0.9
+on:
+  push:
+    paths: ['.github/workflows/verify-player-v09.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sintaxe JavaScript
+        run: |
+          node --check app.js
+          node --check catalog.js
+      - name: Instalar navegador
+        run: npm install --no-save --no-audit --no-fund puppeteer-core@24.17.0
+      - name: Confirmar modo cinema limpo no Chrome móvel
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          cat > /tmp/verify-player-v09.cjs <<'JS'
+          const assert=require("node:assert/strict");
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:"/usr/bin/google-chrome",args:["--no-sandbox","--autoplay-policy=no-user-gesture-required"]});
+            const page=await browser.newPage();
+            await page.setViewport({width:393,height:852,isMobile:true,hasTouch:true});
+            const errs=[];
+            page.on("pageerror",error=>errs.push(error.message));
+            const example=[{id:"e0c1aa4c-6123-4d59-b889-15a90e679abc",title:"Meu Curta de Teste",description:"Vídeo autoral teste de integração.",kind:"movie",series_title:null,episode_number:null,genre:"Autoral",production_year:2026,video_path:null,youtube_id:"M7lc1UVf-VE",poster_path:null,duration_seconds:null,created_at:"2026-10-12T14:00:00Z"}];
+            const mock="window.supabase={createClient:()=>({from:()=>{const chain={};for(const method of ['select','eq','order'])chain[method]=()=>chain;chain.limit=()=>Promise.resolve({data:"+JSON.stringify(example)+",error:null});return chain;}})};";
+            new Function(mock);
+            await page.setRequestInterception(true);
+            page.on("request",req=>{
+              if(req.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js")){
+                return req.respond({status:200,contentType:"application/javascript",body:mock});
+              }
+              req.continue();
+            });
+            await page.goto("http://127.0.0.1:8765/",{waitUntil:"domcontentloaded",timeout:30000});
+            await page.waitForSelector(".poster-card[data-id='upload-e0c1aa4c-6123-4d59-b889-15a90e679abc'] .card-direct-play",{timeout:15000});
+            await page.evaluate(()=>{
+              Element.prototype.requestFullscreen=function(){return Promise.reject(new Error("mock fullscreen blocked"))};
+            });
+            await page.click(".poster-card[data-id='upload-e0c1aa4c-6123-4d59-b889-15a90e679abc'] .card-direct-play");
+            const yt=await page.evaluate(()=>{
+              const layer=document.querySelector("#player-layer");
+              return {open:!layer.hidden,cinema:layer.classList.contains("cinema"),
+                youtube:layer.classList.contains("youtube-active"),
+                title:document.querySelector("#player-heading").textContent,
+                status:document.querySelector("#player-status").textContent,
+                statusHidden:document.querySelector("#player-status").hidden,
+                paragraph:document.querySelector("#player-content-note").textContent,
+                controlsHidden:document.querySelector("#cinema-controls").hidden,
+                frame:document.querySelector("#fallback-frame").src,
+                footer:getComputedStyle(document.querySelector(".player-info")).display};
+            });
+            console.log("YOUTUBE_CLEAN "+JSON.stringify(yt));
+            assert(yt.open&&yt.cinema&&yt.youtube&&yt.statusHidden);
+            assert(yt.status===""&&yt.paragraph===""&&yt.controlsHidden);
+            assert(yt.title==="Meu Curta de Teste");
+            assert(yt.frame.includes("www.youtube-nocookie.com/embed/M7lc1UVf-VE"));
+            assert(yt.footer==="none");
+            await page.click("#player-close");
+            await page.click(".shelf .poster-card:not(.channel-card) .card-direct-play");
+            const native=await page.evaluate(()=>{
+              const layer=document.querySelector("#player-layer");
+              return {open:!layer.hidden,cinema:layer.classList.contains("cinema"),
+                youtube:layer.classList.contains("youtube-active"),
+                title:document.querySelector("#player-heading").textContent,
+                controlsHidden:document.querySelector("#cinema-controls").hidden,
+                htmlControls:document.querySelectorAll(".cinema-toolbar button").length,
+                nativeBrowserControls:document.querySelector("#video").controls,
+                seek:!!document.querySelector("#cinema-seek"),
+                footer:getComputedStyle(document.querySelector(".player-info")).display};
+            });
+            console.log("NATIVE_CINEMA "+JSON.stringify(native));
+            assert(native.open&&native.cinema&&!native.youtube&&!native.controlsHidden);
+            assert(native.title.length>0&&native.htmlControls>=5&&native.seek&&!native.nativeBrowserControls);
+            assert(native.footer==="none");
+            await page.click("#cinema-mute");
+            assert(await page.$eval("#video",v=>v.muted),"Mute button not responding");
+            await page.click("#player-back");
+            assert(await page.$eval("#player-layer",el=>el.hidden),"Player not closed");
+            assert.equal(errs.length,0,JSON.stringify(errs));
+            console.log("CINEMA_CONTROLS_OK");
+            await browser.close();
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/verify-player-v09.cjs

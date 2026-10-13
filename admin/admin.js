@@ -694,7 +694,7 @@ async function saveQualityScore(row,element){
 }
 
 function isNetflixReference(row){try{return new URL(row.licensed_stream_url||"").hostname.replace(/^www\./,"")==="netflix.com"}catch{return false}}
-function netflixReferenceUrl(value){try{const u=new URL(value.trim());return u.protocol==="https:"&&u.hostname.replace(/^www\./,"")==="netflix.com"&&/^\/(title|watch)\/[a-zA-Z0-9_-]+/.test(u.pathname)?u.href:null}catch{return null}}
+function netflixReferenceUrl(value){try{const u=new URL(value.trim());if(u.protocol!=="https:"||u.hostname.replace(/^www\./,"")!=="netflix.com"||u.username||u.password)return null;const direct=u.pathname.match(/^\/(?:title|watch)\/(\d{5,12})(?:\/|$)/);const id=direct?.[1]||u.searchParams.get("jbv");if(!id||!/^\d{5,12}$/.test(id))return null;return "https://www.netflix.com/title/"+id}catch{return null}}
 async function toggleReview(row){
  if(busy)return;
  const next=!row.rights_reviewed;

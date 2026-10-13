@@ -260,12 +260,12 @@ function normalizeFeaturedSearch(value){
 }
 function eligibleFeatured(){
  const films=items.filter(x=>x.kind==="movie"&&x.is_published&&!x.catalog_only
-  &&(x.video_path||x.google_drive_id||x.youtube_id))
+  &&(x.video_path||x.google_drive_id||x.youtube_id||x.licensed_stream_url))
   .map(x=>({id:"upload-"+x.id,title:x.title,record:x,type:isFeaturedSeries(x)?"series":"movie"}));
  const groups=new Map();
  for(const row of items){
   if(row.kind!=="episode"||!row.is_published||row.catalog_only||!row.series_title
-   ||!(row.video_path||row.google_drive_id||row.youtube_id))continue;
+   ||!(row.video_path||row.google_drive_id||row.youtube_id||row.licensed_stream_url))continue;
   const key=normalizeFeaturedSearch(row.series_title);
   if(!groups.has(key))groups.set(key,[]);
   groups.get(key).push(row);

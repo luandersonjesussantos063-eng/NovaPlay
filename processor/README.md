@@ -1,39 +1,34 @@
-# Processador de vídeos NPlay (R2 → FFmpeg → HLS → R2)
+# Processador NPlay sem chaves S3
 
-O processador recebe somente uma **chave de objeto já armazenado** no bucket privado R2. Não baixa torrents ou URLs de terceiros. Use apenas vídeos que a NPlay tenha autorização para distribuir.
+O processador usa **FFmpeg no Docker** e transfere os vídeos pelo **Worker Cloudflare** com binding R2 `VIDEOS`. O Worker exige autenticação Supabase de um administrador NPlay. **Não use mais R2_ACCESS_KEY_ID ou R2_SECRET_ACCESS_KEY.**
 
-## Requisitos
-- Docker (ou Python 3.12, FFmpeg e dependências de requirements.txt)
-- Credenciais **R2 S3 API** com permissão limitada ao bucket `nplay-filmes`
-- Espaço temporário de pelo menos 2–3 vezes o tamanho do vídeo, CPU e RAM suficientes
+## Preparação
 
-## Construção
-```sh
-docker build -t nplay-processor ./processor
-```
+1. Revogue as chaves R2 anteriormente expostas.
+2. Faça login no painel NPlay como administrador. Obtenha um **access token Supabase válido** somente no seu ambiente local; não envie o token por chat nem faça commit.
+3. Descubra seu UUID de usuário administrador e a URL pública do Worker `nplay-r2-api` na Cloudflare.
+4. Crie `processor/.env` **localmente** com:
 
-## Execução sob demanda
-```sh
-docker run --rm --env-file ./processor/.env -v nplay-tmp:/tmp nplay-processor \
-  --input-key "ID-DO-ADMIN/ARQUIVO.mp4" \
-  --output-prefix "hls/ID-DO-FILME"
-```
-
-O arquivo `processor/.env` deve conter:
 ```dotenv
-R2_ACCOUNT_ID=SEU_ACCOUNT_ID
-R2_BUCKET=nplay-filmes
-R2_ACCESS_KEY_ID=SUA_CHAVE_R2
-R2_SECRET_ACCESS_KEY=SEU_SEGREDO_R2
+NPLAY_WORKER_URL=https://SEU-WORKER.workers.dev
+NPLAY_ADMIN_USER_ID=UUID-DO-ADMIN
+NPLAY_ADMIN_ACCESS_TOKEN=TOKEN-DE-ACESSO-SUPABASE
 ```
 
-**Nunca publique esse .env no GitHub.** O processador não precisa de chaves Supabase. O resultado é `hls/ID-DO-FILME/index.m3u8`, ainda **privado** no R2.
+O token Supabase expira e precisará ser renovado; este é um fluxo inicial de processamento manual, não um serviço contínuo.
 
-## Próximos passos antes de disponibilizar a reprodução
-1. Configurar um executor Docker (máquina local ou servidor sob demanda).
-2. Criar credenciais R2 restritas e armazená-las apenas como segredos do executor.
-3. Testar com um vídeo pequeno autorizado e conferir áudio, imagem e playlist.
-4. Implementar uma API de reprodução autenticada para manifest e segmentos HLS.
-5. Integrar a fila de processamento e estados ao painel NPlay.
+## Execução
 
-Este repositório **não** implanta automaticamente um servidor, não expõe os vídeos e não cria despesas de computação sem sua aprovação.
+Na pasta raiz do repositório:
+
+```powershell
+docker build -t nplay-processor ./processor
+docker run --rm --env-file .\processor\.env nplay-processor --help
+docker run --rm --env-file .\processor\.env -v nplay-tmp:/tmp nplay-processor --input-key "UUID-DO-ADMIN/VIDEO.mp4" --output-prefix "hls/UUID-DO-ADMIN/ID-DO-FILME"
+```
+
+A entrada precisa existir no bucket `nplay-filmes`, no prefixo do administrador, e ser conteúdo autorizado. A saída fica privada em `hls/UUID-DO-ADMIN/ID-DO-FILME/index.m3u8`.
+
+## Estado
+
+O Worker tem as rotas autenticadas `GET /processor/source?key=...` e `PUT /processor/output?key=...`. O Dockerfile usa `process_worker.py` por padrão. O antigo `process.py` permanece no repositório apenas para referência. **A reprodução HLS pelo site e a fila de processamento ainda precisam ser integradas.**

@@ -46,6 +46,21 @@ export default {async fetch(request,env){
    await env.VIDEOS.resumeMultipartUpload(b.key,b.uploadId).abort();
    return reply({ok:true});
   }
+  if(path==="/processor/source"&&request.method==="GET"){
+   const key=url.searchParams.get("key");
+   if(!key||!key.startsWith(user.id+"/")||!/(\.mp4|\.webm|\.ogv|\.mov|\.mkv)$/i.test(key))return reply({error:"Arquivo inválido"},400);
+   const object=await env.VIDEOS.get(key);
+   if(!object)return reply({error:"Arquivo não encontrado"},404);
+   return new Response(object.body,{headers:{"Content-Type":object.httpMetadata?.contentType||"application/octet-stream","Cache-Control":"no-store",...cors}});
+  }
+  if(path==="/processor/output"&&request.method==="PUT"){
+   const key=url.searchParams.get("key");
+   if(!key||!new RegExp("^hls/"+user.id.replace(/[.*+?^$\{\}()|[\]\\]/g,"\\  return reply({error:"Rota inexistente"},404);")+"/[a-zA-Z0-9_-]+/(index\\.m3u8|segment_[0-9]{5}\\.ts)$").test(key))return reply({error:"Destino inválido"},400);
+   const type=key.endsWith(".m3u8")?"application/vnd.apple.mpegurl":"video/mp2t";
+   if(Number(request.headers.get("content-length")||0)>25000000)return reply({error:"Segmento muito grande"},413);
+   await env.VIDEOS.put(key,request.body,{httpMetadata:{contentType:type,cacheControl:"private, max-age=3600"}});
+   return reply({ok:true,key});
+  }
   return reply({error:"Rota inexistente"},404);
  }catch(e){return reply({error:"Falha ao processar operação no R2"},500)}
 }}

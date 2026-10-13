@@ -52,7 +52,7 @@ def main():
             "ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(source),
             "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn",
             "-vf", "scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-c:v", "libx264", "-preset", "veryfast", "-threads", "2", "-crf", "23",
             "-pix_fmt", "yuv420p", "-profile:v", "main",
             "-c:a", "aac", "-b:a", "128k", "-ac", "2",
             "-hls_time", "6", "-hls_playlist_type", "vod",

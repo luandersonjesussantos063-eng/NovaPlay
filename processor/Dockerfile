@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY process.py .
+COPY process.py process_worker.py ./
 RUN useradd --create-home --uid 10001 nplay
 USER nplay
-ENTRYPOINT ["python", "process.py"]
+ENTRYPOINT ["python", "process_worker.py"]

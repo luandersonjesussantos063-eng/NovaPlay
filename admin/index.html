@@ -130,6 +130,7 @@
             <option value="youtube">Filme grande pelo YouTube (colar link)</option>
             <option value="google-drive">Vídeo do Google Drive (colar link)</option>
             <option value="licensed">Filme licenciado — link MP4 ou HLS (.m3u8)</option>
+            <option value="netflix-reference">Netflix — cadastrar referência, sem publicar</option>
           </select>
         </div>
         <div id="youtube-fields" class="youtube-fields" hidden>
@@ -160,6 +161,12 @@
             </ol>
             <p>O vídeo abrirá dentro da NovaPlay pelo visualizador oficial do Google Drive. Pode exigir cookies de terceiros, login ou parar por limite de reproduções. O Drive não é uma hospedagem de streaming profissional.</p>
           </div>
+        </div>
+        <div id="netflix-fields" class="youtube-fields" hidden>
+          <label for="netflix-url">Link da página do título na Netflix <span class="required">*</span>
+            <input id="netflix-url" type="url" inputmode="url" maxlength="2048" placeholder="https://www.netflix.com/title/00000000" autocomplete="off">
+          </label>
+          <div class="youtube-howto"><strong>Pré-cadastro privado, sem reprodução</strong><p>Use o link oficial apenas como referência do título. O filme ficará obrigatoriamente em rascunho, invisível ao público e sem player. A assinatura da Netflix não concede direitos de retransmissão. Quando houver contrato de distribuição, edite o título e troque a fonte para “Filme licenciado”, usando um vídeo ou HLS fornecido pelo titular dos direitos.</p></div>
         </div>
         <div id="licensed-fields" class="youtube-fields" hidden>
           <label for="licensed-url">Link direto autorizado do filme <span class="required">*</span>

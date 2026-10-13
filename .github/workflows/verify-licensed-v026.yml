@@ -1,0 +1,77 @@
+name: Verificar cadastro licenciado v026
+on:
+  push:
+    paths:
+      - .github/workflows/verify-licensed-v026.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar JavaScript
+        run: |
+          node --check app.js
+          node --check admin/admin.js
+      - name: Instalar navegador
+        run: npm install --no-audit --no-fund --no-save puppeteer-core@24.17.0
+      - name: Testar rascunho, bloqueio sem licença e reprodução MP4 no Android
+        shell: bash
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          cat > /tmp/novaplay-licensed-test.cjs <<'JS'
+          const puppeteer=require(process.cwd()+"/node_modules/puppeteer-core");
+          const assert=require("node:assert/strict");
+          const MOCK="const film={id:\"11111111-2222-4333-8444-555555555555\",title:\"Filme Licenciado de Teste\",description:\"Teste de reprodução MP4\",kind:\"movie\",genre:\"Ação\",is_published:true,catalog_only:false,licensed_stream_url:\"https://cdn.distribuidor.com/filmes/teste.mp4\",licensed_rights_confirmed:true,rights_reviewed:true,created_at:\"2026-10-12T20:30:00Z\",video_path:null,youtube_id:null,google_drive_id:null,poster_path:null,production_year:2026,duration_seconds:7200};\nwindow.__savedPayload=null;\nwindow.supabase={createClient:()=>({\n auth:{getUser:async()=>({data:{user:{id:\"owner-id\",email:\"owner@example.com\"}},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},\n rpc:async()=>({data:true,error:null}),\n storage:{from:()=>({getPublicUrl:()=>({data:{publicUrl:\"https://test.invalid/cover.png\"}})})},\n from:(table)=>{const q={};\n q.select=()=>q;q.eq=()=>q;q.order=()=>q;q.gte=()=>q;q.in=()=>q;q.limit=async()=>({data:[],error:null});\n q.maybeSingle=async()=>({data:table===\"novaplay_featured\"?{film_ids:[\"upload-\"+film.id]}:table===\"novaplay_admins\"?{user_id:\"owner-id\"}:null,error:null});\n q.range=async()=>({data:table===\"novaplay_library\"?[film]:[],error:null});\n q.insert=data=>{if(table===\"novaplay_activity_events\")return Promise.resolve({data:null,error:null});window.__savedPayload=data;return{select:()=>({single:async()=>({data:{id:film.id},error:null})})}};\n q.update=data=>({eq:()=>({select:()=>({single:async()=>({data,error:null})})})});\n return q;\n }\n})};";
+          (async()=>{
+           const browser=await puppeteer.launch({headless:true,executablePath:"/usr/bin/google-chrome",args:["--no-sandbox"]});
+           try{
+           const errors=[];
+           const intercept=r=>{
+             if(r.url().includes("supabase-js@2.58.0/dist/umd/supabase.min.js"))return r.respond({status:200,contentType:"text/javascript",body:MOCK});
+             if(r.url().startsWith("https://cdn.jsdelivr.net/"))return r.respond({status:200,contentType:"text/javascript",body:""});
+             if(r.url().includes("cdn.distribuidor.com/filmes/teste.mp4"))return r.respond({status:200,contentType:"video/mp4",body:""});
+             return r.continue();
+           };
+           const admin=await browser.newPage();await admin.setViewport({width:393,height:852,isMobile:true});
+           admin.on("pageerror",e=>errors.push("admin: "+e.message));
+           await admin.setRequestInterception(true);admin.on("request",intercept);
+           await admin.goto("http://127.0.0.1:8765/admin/",{waitUntil:"domcontentloaded",timeout:20000});
+           await admin.waitForFunction(()=>!document.querySelector("#dashboard").hidden,{timeout:15000});
+           await admin.$eval("#licensed-new",b=>b.click());
+           const prepared=await admin.evaluate(()=>({mode:document.querySelector("#source-type").value,fieldsHidden:document.querySelector("#licensed-fields").hidden,publish:document.querySelector("#publish").checked,coverVisible:!document.querySelector("#youtube-cover-section").hidden}));
+           assert.deepEqual(prepared,{mode:"licensed",fieldsHidden:false,publish:false,coverVisible:true});
+           await admin.$eval("#title",e=>e.value="Meu Filme Licenciado");
+           await admin.$eval("#licensed-url",e=>e.value="https://cdn.distribuidor.com/filmes/meu-filme.mp4");
+           await admin.$eval("#publish",e=>e.checked=true);
+           await admin.$eval("#upload-form",form=>form.requestSubmit());
+           await admin.waitForFunction(()=>document.querySelector("#upload-message").textContent.includes("confirme que já possui licença"),{timeout:3500});
+           assert.equal(await admin.evaluate(()=>window.__savedPayload),null,"Must prevent publishing without rights");
+           await admin.$eval("#publish",e=>e.checked=false);
+           await admin.$eval("#upload-form",form=>form.requestSubmit());
+           await admin.waitForFunction(()=>window.__savedPayload!==null,{timeout:6000});
+           const payload=await admin.evaluate(()=>window.__savedPayload);
+           assert.equal(payload.licensed_stream_url,"https://cdn.distribuidor.com/filmes/meu-filme.mp4");
+           assert.equal(payload.is_published,false);
+           assert.equal(payload.licensed_rights_confirmed,false);
+           console.log("LICENSED_DRAFT_AND_RIGHTS_GATE_OK");
+           const viewer=await browser.newPage();
+           viewer.on("pageerror",e=>errors.push("viewer: "+e.message));
+           await viewer.setRequestInterception(true);viewer.on("request",intercept);
+           await viewer.goto("http://127.0.0.1:8765/",{waitUntil:"domcontentloaded",timeout:20000});
+           await viewer.waitForFunction(()=>document.querySelector("#hero-title").textContent==="Filme Licenciado de Teste",{timeout:16000});
+           await viewer.$eval("#hero-play",b=>b.click());
+           await viewer.waitForFunction(()=>!document.querySelector("#player-layer").hidden,{timeout:4500});
+           const play=await viewer.evaluate(()=>({src:document.querySelector("#video").src,hidden:document.querySelector("#video").hidden,frameHidden:document.querySelector("#fallback-frame").hidden}));
+           assert.equal(play.src,"https://cdn.distribuidor.com/filmes/teste.mp4");
+           assert(!play.hidden&&play.frameHidden);
+           console.log("LICENSED_DIRECT_PLAYER_OK",JSON.stringify(play));
+           assert(!errors.length,"JS exceptions "+JSON.stringify(errors));
+           console.log("NOVAPLAY_LICENSED_LINKS_TEST_PASS");
+           }finally{await browser.close()}
+          })().catch(e=>{console.error(e.stack||e);process.exit(1)});
+          JS
+          node /tmp/novaplay-licensed-test.cjs

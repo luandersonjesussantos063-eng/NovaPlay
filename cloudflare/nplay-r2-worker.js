@@ -55,7 +55,7 @@ export default {async fetch(request,env){
   }
   if(path==="/processor/output"&&request.method==="PUT"){
    const key=url.searchParams.get("key");
-   if(!key||!new RegExp("^hls/"+user.id.replace(/[.*+?^$\{\}()|[\]\\]/g,"\\  return reply({error:"Rota inexistente"},404);")+"/[a-zA-Z0-9_-]+/(index\\.m3u8|segment_[0-9]{5}\\.ts)$").test(key))return reply({error:"Destino inválido"},400);
+   if(!key||!key.startsWith("hls/"+user.id+"/")||!/^hls\/[0-9a-f-]+\/[a-zA-Z0-9_-]+\/(index\.m3u8|segment_[0-9]{5}\.ts)$/.test(key))return reply({error:"Destino inválido"},400);
    const type=key.endsWith(".m3u8")?"application/vnd.apple.mpegurl":"video/mp2t";
    if(Number(request.headers.get("content-length")||0)>25000000)return reply({error:"Segmento muito grande"},413);
    await env.VIDEOS.put(key,request.body,{httpMetadata:{contentType:type,cacheControl:"private, max-age=3600"}});

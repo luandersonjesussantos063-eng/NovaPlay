@@ -802,6 +802,12 @@ async function sendForm(e){
  const cover=(external?$("youtube-poster-file"):$("poster-file")).files[0]||null;
  const youtubeId=youtube?extractYoutubeId($("youtube-url").value):null;
  const driveFile=drive?parseGoogleDriveLink($("drive-url").value):null;
+ if(licensed&&netflixReferenceUrl($("licensed-url").value)){
+  $("netflix-url").value=$("licensed-url").value.trim();
+  $("source-type").value="netflix-reference";setSourceType();
+  status("upload-message","Reconheci o link da Netflix e alterei para cadastro privado. Confira e clique novamente em Salvar referência privada.",false,true);
+  return;
+ }
  const licensedUrl=licensed?parseLicensedStreamUrl($("licensed-url").value):null;
  const netflixUrl=netflix?netflixReferenceUrl($("netflix-url").value):null;
  if(netflix&&!netflixUrl){status("upload-message","Cole o link oficial HTTPS do título da Netflix (netflix.com/title/...). Nenhum vídeo será reproduzido.",true);return}
@@ -921,6 +927,7 @@ function init(){
  $("pending-exit").onclick=async()=>{await client.auth.signOut();show("login-view")};
  $("logout").onclick=async()=>{if(busy)return;await client.auth.signOut();sessionUser=null;show("login-view")};
  $("upload-form").onsubmit=sendForm;$("kind").onchange=setKind;$("source-type").onchange=setSourceType;setSourceType();
+ $("licensed-url").addEventListener("change",()=>{const url=netflixReferenceUrl($("licensed-url").value);if(url&&$("source-type").value==="licensed"){$("netflix-url").value=url;$("source-type").value="netflix-reference";setSourceType();status("upload-message","Link da Netflix detectado: referência privada selecionada automaticamente. O filme ficará em rascunho.",false,true)}});
  $("licensed-new").onclick=()=>{
   resetForm();
   $("kind").value="movie";setKind();

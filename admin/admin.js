@@ -132,7 +132,7 @@ function setSourceType(){
   ?"Adicione uma capa vertical para o filme licenciado (JPG, PNG ou WebP, até 5 MB)."
   :drive?"Se não escolher capa, usaremos uma arte padrão da NovaPlay. JPG, PNG ou WebP, até 5 MB."
   :"Se não escolher capa, usamos a miniatura do YouTube. JPG, PNG ou WebP, até 5 MB.";
- $("submit-upload").textContent=busy?"Salvando...":editing?.catalog_only?"Salvar e liberar para assistir":editing?"Salvar alterações":external?"Cadastrar vídeo pelo link":"Enviar para a NovaPlay";
+ $("submit-upload").textContent=busy?"Salvando...":netflix?"Salvar referência privada":editing?.catalog_only?"Salvar e liberar para assistir":editing?"Salvar alterações":external?"Cadastrar vídeo pelo link":"Enviar para a NovaPlay";
 }
 function fileKind(file,video=true){
  const ext=(file.name.split(".").pop()||"").toLowerCase();
@@ -652,7 +652,7 @@ function beginEdit(row){
  $("video-file").value="";$("poster-file").value="";$("youtube-poster-file").value="";
  $("video-file-label").textContent=releasing?"Selecionar vídeo autorizado":"Trocar vídeo (opcional)";
  $("poster-file-label").textContent="Trocar capa (opcional)";
- $("submit-upload").textContent=releasing?"Salvar e liberar para assistir":"Salvar alterações";
+ $("submit-upload").textContent=isNetflixReference(row)?"Salvar referência privada":releasing?"Salvar e liberar para assistir":"Salvar alterações";
  status("upload-message",releasing?"“"+row.title+"” já está na grade como Em breve. Adicione o arquivo ou link do vídeo autorizado. Ao salvar, sairá de Em breve e terá reprodução habilitada. Sem um vídeo, não será liberado.":"Editando “"+row.title+"”. Você pode mudar só o texto ou trocar arquivos.",false,releasing);
  document.querySelector(".editor").scrollIntoView({behavior:"smooth",block:"start"});
 }

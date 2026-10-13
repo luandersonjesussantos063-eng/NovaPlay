@@ -797,7 +797,7 @@ async function removeItem(row){
 async function sendForm(e){
  e.preventDefault();if(busy||!sessionUser)return;
  const mode=sourceMode();
- const youtube=mode==="youtube",drive=mode==="google-drive",licensed=mode==="licensed",external=youtube||drive||licensed;
+ const youtube=mode==="youtube",drive=mode==="google-drive",licensed=mode==="licensed",netflix=mode==="netflix-reference",external=youtube||drive||licensed||netflix;
  const file=$("video-file").files[0]||null;
  const cover=(external?$("youtube-poster-file"):$("poster-file")).files[0]||null;
  const youtubeId=youtube?extractYoutubeId($("youtube-url").value):null;

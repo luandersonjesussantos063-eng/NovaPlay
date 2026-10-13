@@ -467,12 +467,12 @@ function renderPlaybackIssues(){
   subtitle.textContent=issue.report_count+" aviso(s) · Último: "+new Date(issue.last_reported_at).toLocaleString("pt-BR");
   info.append(title,subtitle);
   const controls=document.createElement("div");controls.className="issue-controls";
-  if(movie?.google_drive_id||movie?.youtube_id){
+  if(movie?.google_drive_id||movie?.youtube_id||movie?.licensed_stream_url){
    const open=document.createElement("a");open.className="outline compact";
    open.textContent="Testar link ↗";open.target="_blank";open.rel="noopener noreferrer";
-   open.href=movie.google_drive_id
+   open.href=movie.licensed_stream_url|| (movie.google_drive_id
     ? "https://drive.google.com/file/d/"+encodeURIComponent(movie.google_drive_id)+"/view"+(movie.google_drive_resource_key?"?resourcekey="+encodeURIComponent(movie.google_drive_resource_key):"")
-    : "https://www.youtube.com/watch?v="+encodeURIComponent(movie.youtube_id);
+    : "https://www.youtube.com/watch?v="+encodeURIComponent(movie.youtube_id));
    controls.append(open);
   }
   if(movie){

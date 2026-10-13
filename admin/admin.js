@@ -694,7 +694,7 @@ async function saveQualityScore(row,element){
 }
 
 function isNetflixReference(row){try{return new URL(row.licensed_stream_url||"").hostname.replace(/^www\./,"")==="netflix.com"}catch{return false}}
-function netflixReferenceUrl(value){try{const u=new URL(value.trim());if(u.protocol!=="https:"||u.hostname.replace(/^www\./,"")!=="netflix.com"||u.username||u.password)return null;const direct=u.pathname.match(/^\/(?:title|watch)\/(\d{5,12})(?:\/|$)/);const id=direct?.[1]||u.searchParams.get("jbv");if(!id||!/^\d{5,12}$/.test(id))return null;return "https://www.netflix.com/title/"+id}catch{return null}}
+function netflixReferenceUrl(value){try{const u=new URL(value.trim());if(u.protocol!=="https:"||u.hostname.replace(/^www\./,"")!=="netflix.com"||u.username||u.password)return null;const direct=u.pathname.match(/^\/(?:title|watch)\/(\d{5,12})(?:\/|$)/);const id=direct?.[1]||u.searchParams.get("jbv");if(!id||!/^\d{5,12}$/.test(id))return null;return u.href}catch{return null}}
 async function toggleReview(row){
  if(busy)return;
  const next=!row.rights_reviewed;
@@ -810,7 +810,7 @@ async function sendForm(e){
  }
  const licensedUrl=licensed?parseLicensedStreamUrl($("licensed-url").value):null;
  const netflixUrl=netflix?netflixReferenceUrl($("netflix-url").value):null;
- if(netflix&&!netflixUrl){status("upload-message","Cole o link oficial HTTPS do título da Netflix (netflix.com/title/...). Nenhum vídeo será reproduzido.",true);return}
+ if(netflix&&!netflixUrl){status("upload-message","Informe um link oficial Netflix /title/ID ou /browse/genre/...?...jbv=ID.",true);return}
  if(licensed&&!licensedUrl){status("upload-message","Informe um link HTTPS direto autorizado terminando em .mp4, .webm, .ogv ou .m3u8. Endereços de filmes na Netflix não funcionam aqui.",true);return}
  if(licensed&&$("publish").checked&&!$("licensed-rights").checked){status("upload-message","Para publicar este filme, confirme que já possui licença para exibição pública na NovaPlay. Enquanto aguarda, salve como rascunho.",true);return}
  if(youtube&&!youtubeId){status("upload-message","Cole um link válido do YouTube, como https://youtu.be/ID ou youtube.com/watch?v=ID.",true);return}
@@ -927,7 +927,7 @@ function init(){
  $("pending-exit").onclick=async()=>{await client.auth.signOut();show("login-view")};
  $("logout").onclick=async()=>{if(busy)return;await client.auth.signOut();sessionUser=null;show("login-view")};
  $("upload-form").onsubmit=sendForm;$("kind").onchange=setKind;$("source-type").onchange=setSourceType;setSourceType();
- $("licensed-url").addEventListener("change",()=>{const url=netflixReferenceUrl($("licensed-url").value);if(url&&$("source-type").value==="licensed"){$("netflix-url").value=url;$("source-type").value="netflix-reference";setSourceType();status("upload-message","Link da Netflix detectado: referência privada selecionada automaticamente. O filme ficará em rascunho.",false,true)}});
+ $("licensed-url").addEventListener("input",()=>{const url=netflixReferenceUrl($("licensed-url").value);if(url&&$("source-type").value==="licensed"){$("netflix-url").value=url;$("source-type").value="netflix-reference";setSourceType();status("upload-message","Link da Netflix detectado: referência privada selecionada automaticamente. O filme ficará em rascunho.",false,true)}});
  $("licensed-new").onclick=()=>{
   resetForm();
   $("kind").value="movie";setKind();
